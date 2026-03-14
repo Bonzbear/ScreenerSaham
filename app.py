@@ -161,33 +161,38 @@ def run_backtest(ticker):
     if df.empty:
         return pd.DataFrame()
 
+    # perbaiki struktur kolom
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+
     df["SMA5"] = df["Close"].rolling(5).mean()
 
+    df = df.dropna()
     df = df.reset_index()
 
     hasil = []
 
-    for i in range(5,len(df)-1):
+    for i in range(5, len(df)-1):
 
         today = df.iloc[i]
         prev = df.iloc[i-1]
         tomorrow = df.iloc[i+1]
 
-        close = today["Close"]
-        prev_close = prev["Close"]
+        close = float(today["Close"])
+        prev_close = float(prev["Close"])
 
-        volume = today["Volume"]
-        prev_volume = prev["Volume"]
+        volume = float(today["Volume"])
+        prev_volume = float(prev["Volume"])
+
+        sma5 = float(today["SMA5"])
 
         value = close * volume
 
         signal = (
-
-            volume > prev_volume and
-            prev_close < close and
-            close > today["SMA5"] and
-            value > 5000000000
-
+            (volume > prev_volume) and
+            (prev_close < close) and
+            (close > sma5) and
+            (value > 5000000000)
         )
 
         if not signal:
@@ -196,11 +201,9 @@ def run_backtest(ticker):
         gain = (tomorrow["High"] - close) / close * 100
 
         hasil.append({
-
             "Date": today["Date"],
-            "Close": close,
+            "Close": round(close,2),
             "Next High %": round(gain,2)
-
         })
 
     return pd.DataFrame(hasil)

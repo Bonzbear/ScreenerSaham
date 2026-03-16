@@ -305,8 +305,6 @@ if not df.empty:
 
     df.insert(0, "Rank", range(1, len(df)+1))
 
-    return df
-
 
 if st.button("Run Screener"):
 

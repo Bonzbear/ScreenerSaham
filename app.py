@@ -275,13 +275,35 @@ def run_screener():
 
     status.text("Scan selesai")
 
-    df = pd.DataFrame(hasil)
+df = pd.DataFrame(hasil)
 
-    if not df.empty:
-        df = df.sort_values(
-            by=["Score","Winrate_TP1.5%"],
-            ascending=False
-        )
+if not df.empty:
+
+    # =========================
+    # PROBABILITY NAIK
+    # =========================
+
+    df["Probability_Up_%"] = (
+        (df["Score"] / 8 * 0.6) +
+        (df["Winrate_TP1.5%"].fillna(0) / 100 * 0.4)
+    ) * 100
+
+    df["Probability_Up_%"] = df["Probability_Up_%"].round(2)
+
+    # =========================
+    # SORTING
+    # =========================
+
+    df = df.sort_values(
+        by=["Probability_Up_%","Score","Winrate_TP1.5%"],
+        ascending=False
+    )
+
+    # =========================
+    # RANKING
+    # =========================
+
+    df.insert(0, "Rank", range(1, len(df)+1))
 
     return df
 

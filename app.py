@@ -278,7 +278,7 @@ def run_screener():
 # BUTTONS
 # =========================
 
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 
 with col1:
     if st.button("Run Screener"):
@@ -287,11 +287,11 @@ with col1:
             st.warning("Tidak ada saham memenuhi kriteria")
         else:
             st.dataframe(df, use_container_width=True)
-            st.button("📤 Kirim ke Telegram"):
-                msg = format_telegram(df)
-                send_telegram(msg)
-                st.success("Berhasil dikirim ke Telegram!")
-   
+with col3:
+        if st.button("📤 Kirim ke Telegram"):
+            msg = format_telegram(df)
+            send_telegram(msg)
+            st.success("Berhasil dikirim ke Telegram!")
 
 with col2:
     if st.button("🔄 Clear Cache"):

@@ -6,13 +6,6 @@ import requests
 TOKEN = "8639573881:AAHQfo4YEqjFVMMurZD4-gS416UrMbukGsE"
 CHAT_ID = "1060491569"
 
-def send_telegram(msg):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    requests.post(url, data={
-        "chat_id": CHAT_ID,
-        "text": msg
-    })
-
 def format_telegram(df):
 
     if df.empty:
@@ -25,6 +18,15 @@ def format_telegram(df):
         msg += f"Close: {row['Close']} | Score: {row['Score']}\n\n"
 
     return msg
+    
+def send_telegram(msg):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    requests.post(url, data={
+        "chat_id": CHAT_ID,
+        "text": msg
+    })
+
+
 
 st.set_page_config(page_title="Screener Saham INSTANT", layout="wide")
 st.title("Screener Saham Indonesia (INSTANT ⚡)")

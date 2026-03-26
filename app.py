@@ -279,7 +279,6 @@ def run_screener():
 # =========================
 # BUTTONS
 # =========================
-
 col1, col2, col3 = st.columns(3)
 
 # ======================
@@ -317,22 +316,6 @@ with col3:
 with col2:
     if st.button("🔄 Clear Cache"):
         st.cache_data.clear()
-        st.success("Cache berhasil dihapus.")col1, col2, col3 = st.columns(3)
+        st.success("Cache berhasil dihapus.")
 
-with col1:
-    if st.button("Run Screener"):
-        df = run_screener()
-        if df.empty:
-            st.warning("Tidak ada saham memenuhi kriteria")
-        else:
-            st.dataframe(df, use_container_width=True)
-with col3:
-        if st.button("📤 Kirim ke Telegram"):
-            msg = format_telegram(df)
-            send_telegram(msg)
-            st.success("Berhasil dikirim ke Telegram!")
-
-with col2:
-    if st.button("🔄 Clear Cache"):
-        st.cache_data.clear()
         st.success("Cache berhasil dihapus. Data akan fresh di run berikutnya.")

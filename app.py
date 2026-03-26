@@ -1,6 +1,30 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import requests
+
+TOKEN = "8639573881:AAHQfo4YEqjFVMMurZD4-gS416UrMbukGsE"
+CHAT_ID = "1060491569"
+
+def send_telegram(msg):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    requests.post(url, data={
+        "chat_id": CHAT_ID,
+        "text": msg
+    })
+
+def format_telegram(df):
+
+    if df.empty:
+        return "Tidak ada sinyal hari ini"
+
+    msg = "📊 Screener Saham\n\n"
+
+    for i, row in df.head(10).iterrows():
+        msg += f"{i+1}. {row['Ticker']} | {row['Signal']}\n"
+        msg += f"Close: {row['Close']} | Score: {row['Score']}\n\n"
+
+    return msg
 
 st.set_page_config(page_title="Screener Saham INSTANT", layout="wide")
 st.title("Screener Saham Indonesia (INSTANT ⚡)")
@@ -263,6 +287,11 @@ with col1:
             st.warning("Tidak ada saham memenuhi kriteria")
         else:
             st.dataframe(df, use_container_width=True)
+    if not df.empty:
+    if st.button("📤 Kirim ke Telegram"):
+        msg = format_telegram(df)
+        send_telegram(msg)
+        st.success("Berhasil dikirim ke Telegram!")
 
 with col2:
     if st.button("🔄 Clear Cache"):

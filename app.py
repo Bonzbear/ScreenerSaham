@@ -14,7 +14,7 @@ def format_telegram(df):
     msg = "📊 Screener Saham\n\n"
 
     for i, row in df.head(10).iterrows():
-        msg += f" {row['Ticker']}\n"
+        msg += f" {row['Ticker'].replace(".JK","")}\n"
 
     return msg
     

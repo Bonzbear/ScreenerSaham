@@ -285,12 +285,12 @@ with col1:
         df = run_screener()
         if df.empty:
             st.warning("Tidak ada saham memenuhi kriteria")
-            if st.button("📤 Kirim ke Telegram"):
+        else:
+            st.dataframe(df, use_container_width=True)
+            st.button("📤 Kirim ke Telegram"):
                 msg = format_telegram(df)
                 send_telegram(msg)
                 st.success("Berhasil dikirim ke Telegram!")
-        else:
-            st.dataframe(df, use_container_width=True)
    
 
 with col2:

@@ -61,7 +61,7 @@ def prepare_data(df):
     df["VWAP"] = (
         df["Volume"] * (df["High"]+df["Low"]+df["Close"])/3
     ).cumsum() / df["Volume"].cumsum()
-
+    
     return df.dropna()
 
 
@@ -91,7 +91,7 @@ def calculate_winrate(df):
 
         sma5 = float(today["SMA5"])
         value = close * volume
-        change_pct = ((close - prev_close) / prev_close) * 100
+     
 
         gain = (float(nextd["High"]) - close) / close * 100
 
@@ -205,7 +205,7 @@ def run_screener():
         volume = float(today["Volume"])
         prev_volume = float(prev["Volume"])
         prev_close = float(prev["Close"])
-
+        change_pct = ((close - prev_close) / prev_close) * 100
         sma5 = float(today["SMA5"])
 
         value = close * volume

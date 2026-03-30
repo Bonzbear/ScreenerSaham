@@ -259,7 +259,7 @@ def run_screener():
             "Ticker":ticker,
             "Signal":", ".join(signals),
             "Close":round(close,2),
-            "Change%":round(change_pct,2),
+            "Change%":(change_pct,2),
             "Score":score,
             "Winrate":winrate,
             "Probability":probability

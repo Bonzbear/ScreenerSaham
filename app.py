@@ -14,7 +14,7 @@ def format_telegram(df):
     msg = "📊 Screener Saham\n\n"
 
     for i, row in df.head(10).iterrows():
-        msg += f" {row['Ticker'].replace(".JK","")}\n"
+        msg += f" {row['Ticker'].replace(".JK","")} | Close: {row['Close']} | {row['Change%']}% | Score: {row['Score']}\n\n"
 
     return msg
     
@@ -87,6 +87,7 @@ def calculate_winrate(df):
         volume = float(today["Volume"])
         prev_volume = float(prev["Volume"])
         prev_close = float(prev["Close"])
+        change_pct = ((close - prev_close) / prev_close) * 100
 
         sma5 = float(today["SMA5"])
         value = close * volume
@@ -258,6 +259,7 @@ def run_screener():
             "Ticker":ticker,
             "Signal":", ".join(signals),
             "Close":round(close,2),
+            "Change%":round(change_pct,2),
             "Score":score,
             "Winrate":winrate,
             "Probability":probability

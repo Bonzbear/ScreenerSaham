@@ -18,8 +18,8 @@ def format_telegram(df):
 
     if df.empty:
         return "Tidak ada sinyal hari ini"
-
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    indonesia_tz = pytz.timezone('Asia/Jakarta')
+    now = datetime.datetime.now(indonesia_tz).strftime("%Y-%m-%d %H:%M")
 
     msg = f"📊 Screener Saham\n{now}\n\n"
 

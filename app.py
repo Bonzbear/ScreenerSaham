@@ -27,8 +27,7 @@ def format_telegram(df):
 
         ticker = row["Ticker"].replace(".JK","")
 
-        msg += f"{ticker} | {row['Signal']}\n"
-        msg += f"Close: {row['Close']} | {row['Change%']}% | Score: {row['Score']}\n\n"
+        msg += f"{ticker} | Close: {row['Close']} | {row['Change%']}% | Score: {row['Score']}\n\n "
 
     return msg
 

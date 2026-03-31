@@ -3,6 +3,7 @@ import yfinance as yf
 import pandas as pd
 import requests
 import datetime
+import pytz
 
 TOKEN = "8639573881:AAHQfo4YEqjFVMMurZD4-gS416UrMbukGsE"
 CHAT_ID = "1060491569"

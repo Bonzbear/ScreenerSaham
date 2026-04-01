@@ -30,7 +30,7 @@ def format_telegram(df):
 
         msg += f"{ticker}\n"
 
-    msg += f"\nDisclaimer:\nSinyal yang dihasilkan bot ini bukan ajakan membeli/menjual saham. Segala keputusan trading merupakan tanggung jawab masing-masing. Gunakan manajemen risiko."
+    msg += f"\nDisclaimer:\nSinyal yang diberikan bukan ajakan membeli/menjual saham. Segala keputusan trading merupakan tanggung jawab masing-masing. Gunakan manajemen risiko."
     return msg
    
 

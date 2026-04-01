@@ -31,6 +31,7 @@ def format_telegram(df):
         msg += f"{ticker} | Close: {row['Close']} | {row['Change%']}% \n\n "
 
     return msg
+    msg = f"Disclaimer: Sinyal yang dihasilkan bot ini bukan ajakan membeli/menjual saham. Segala keputusan trading merupakan tanggung jawab masing-masing. Gunakan manajemen risiko."
 
 # =========================
 # CONFIG

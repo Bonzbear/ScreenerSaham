@@ -28,7 +28,7 @@ def format_telegram(df):
 
         ticker = row["Ticker"].replace(".JK","")
 
-        msg += f"{ticker} | Close: {row['Close']} | {row['Change%']}% \n\n"
+        msg += f"{ticker}\n\n"
 
     msg += f"\nDisclaimer:\nSinyal yang dihasilkan bot ini bukan ajakan membeli/menjual saham. Segala keputusan trading merupakan tanggung jawab masing-masing. Gunakan manajemen risiko."
     return msg

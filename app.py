@@ -78,7 +78,7 @@ def round_price(price, direction="nearest"):
         return int(round(price / tick) * tick)
 
 # =========================
-# DATA DAILY
+# DATA
 # =========================
 @st.cache_data(ttl=600)
 def get_data_daily(tickers):
@@ -89,9 +89,6 @@ def get_data_daily(tickers):
         progress=False
     )
 
-# =========================
-# DATA 15M
-# =========================
 @st.cache_data(ttl=300)
 def get_data_15m(ticker):
     df = yf.download(
@@ -117,7 +114,7 @@ def prepare_data(df):
     return df.dropna()
 
 # =========================
-# SUPPORT 15M
+# SUPPORT 15M (AMAN)
 # =========================
 def get_support_15m(ticker):
 
@@ -126,15 +123,12 @@ def get_support_15m(ticker):
     if df_15m is None or df_15m.empty:
         return None
 
-    # Handle jika multi-index
     if isinstance(df_15m.columns, pd.MultiIndex):
         df_15m.columns = df_15m.columns.droplevel(0)
 
-    # Pastikan kolom Low ada
     if "Low" not in df_15m.columns:
         return None
 
-    # Ambil data terakhir dan bersihkan NaN
     lows = df_15m["Low"].tail(5).dropna()
 
     if len(lows) == 0:
@@ -142,7 +136,6 @@ def get_support_15m(ticker):
 
     support = lows.min()
 
-    # Validasi angka
     if pd.isna(support):
         return None
 
@@ -172,13 +165,12 @@ def calculate_score(df):
     if float(today["Close"]) > float(today["VWAP"]): score += 125
     if float(prev["Close"]) < float(prev["VWAP"]): score += 125
 
-    # penalti upper wick
+    # warning upper wick
     body = abs(close - open_)
     upper_wick = high - max(close, open_)
 
-    if body > 0:
-        if upper_wick > body * 1.5:
-            score -= 100
+    if body > 0 and upper_wick > body * 1.5:
+        score -= 100
 
     return score
 
@@ -190,10 +182,7 @@ def run_screener():
     data = get_data_daily(TICKERS)
     results = []
 
-    progress = st.progress(0)
-    total = len(TICKERS)
-
-    for i, ticker in enumerate(TICKERS):
+    for ticker in TICKERS:
 
         try:
             df = data[ticker].copy()
@@ -213,7 +202,6 @@ def run_screener():
         open_ = float(today["Open"])
         close = float(today["Close"])
         high = float(today["High"])
-        low = float(today["Low"])
         volume = float(today["Volume"])
 
         prev_close = float(prev["Close"])
@@ -230,32 +218,26 @@ def run_screener():
         # ======================
         # SIGNAL
         # ======================
-        signals = []
-
-        if volume > prev_volume and prev_close < close and close > sma5 and value > 5000000000:
-            signals.append("V1")
-
-        if volume > prev_volume and prev_close < close and close > sma5 and value > 5000000000 and (high/prev_close) >= 1.10:
-            signals.append("V2")
-
-        if not signals:
-            progress.progress((i+1)/total)
+        if not (volume > prev_volume and prev_close < close and close > sma5 and value > 3000000000):
             continue
 
         # ======================
-        # SUPPORT 15M
-        # ======================
-        support_15m = get_support_15m(ticker)
-
-        SL_15m = support_15m * 0.995
-        SL_max = entry * 0.98
-        # ======================
-        # ENTRY TP SL
+        # ENTRY TP
         # ======================
         entry = round_price(close)
         TP = round_price(entry * 1.015, "up")
 
-        SL = round_price(max(SL_15m, SL_max), "down")
+        # ======================
+        # SL dari SUPPORT 15M
+        # ======================
+        support_15m = get_support_15m(ticker)
+
+        if support_15m is not None and not math.isnan(support_15m):
+            SL = round_price(support_15m * 0.995, "down")
+            sl_source = "15M"
+        else:
+            SL = round_price(entry * 0.985, "down")
+            sl_source = "Fallback"
 
         if SL >= entry:
             continue
@@ -273,15 +255,11 @@ def run_screener():
         if body > 0 and upper_wick > body * 1.5:
             warning = "⚠️"
 
-        # ======================
-        # SCORE
-        # ======================
         score = calculate_score(df)
         probability = round(score / 10, 2)
 
         results.append({
             "Ticker": ticker,
-            "Signal": ", ".join(signals),
             "Entry": entry,
             "TP": TP,
             "SL": SL,
@@ -289,10 +267,9 @@ def run_screener():
             "Reward%": round(reward_pct,2),
             "Score": score,
             "Probability": probability,
+            "SL Source": sl_source,
             "Warning": warning
         })
-
-        progress.progress((i+1)/total)
 
     df = pd.DataFrame(results)
 
@@ -306,29 +283,20 @@ def run_screener():
 # =========================
 # UI
 # =========================
-col1, col2, col3 = st.columns(3)
+if st.button("Run Screener"):
+    df = run_screener()
+    if df.empty:
+        st.warning("Tidak ada saham memenuhi kriteria")
+    else:
+        st.session_state["df"] = df
 
-with col1:
-    if st.button("Run Screener"):
-        df = run_screener()
-        if df.empty:
-            st.warning("Tidak ada saham memenuhi kriteria")
-        else:
-            st.session_state["df"] = df
-
-with col2:
-    if st.button("Clear Cache"):
-        st.cache_data.clear()
-        st.success("Cache dihapus")
-
-with col3:
-    if st.button("Kirim Telegram"):
-        if "df" not in st.session_state:
-            st.error("Jalankan screener dulu!")
-        else:
-            msg = format_telegram(st.session_state["df"])
-            send_telegram(msg)
-            st.success("Berhasil dikirim!")
+if st.button("Kirim Telegram"):
+    if "df" not in st.session_state:
+        st.error("Jalankan screener dulu!")
+    else:
+        msg = format_telegram(st.session_state["df"])
+        send_telegram(msg)
+        st.success("Berhasil dikirim!")
 
 if "df" in st.session_state:
     st.dataframe(st.session_state["df"], use_container_width=True)

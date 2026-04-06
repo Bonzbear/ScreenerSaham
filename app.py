@@ -229,20 +229,20 @@ def run_screener():
 
         probability = round((winrate*0.6)+(score/10*0.4),2)
         # ======================
-# 🔥 DETEKSI WARNING
-# ======================
-open_ = float(today["Open"])
-high = float(today["High"])
-low = float(today["Low"])
-close = float(today["Close"])
+        # 🔥 DETEKSI WARNING
+        # ======================
+        open_ = float(today["Open"])
+        high = float(today["High"])
+        low = float(today["Low"])
+        close = float(today["Close"])
 
-body = abs(close - open_)
-upper_wick = high - max(close, open_)
+        body = abs(close - open_)
+        upper_wick = high - max(close, open_)
 
-warning = ""
+        warning = ""
 
-if body > 0 and upper_wick > body * 1.5:
-    warning = "⚠️ Upper Wick"
+        if body > 0 and upper_wick > body * 1.5:
+        warning = "⚠️ Upper Wick"
     
         results.append({
             "Ticker": ticker,

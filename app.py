@@ -177,21 +177,7 @@ def run_screener():
             progress.progress((i+1)/total)
             continue
 
-        # ======================
-        # STOP LOSS
-        # ======================
-        SL = low * 0.995
-        risk_pct = ((close - SL) / close) * 100
-        # ======================
-        # TARGET PROFIT
-        # ======================
-        entry = close
-        TP = entry * 1.015   # target 1.5%
-
-        reward_pct = ((TP - entry) / entry) * 100
-        # Filter risk max 2%
-        if risk_pct > 2:
-            continue
+       
 
         # ======================
         # WARNING WICK

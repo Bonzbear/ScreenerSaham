@@ -218,7 +218,7 @@ def run_screener():
         # ======================
         # SIGNAL
         # ======================
-        if not (volume > prev_volume and prev_close < close and close > sma5 and value > 3000000000):
+        if not (volume > prev_volume and prev_close < close and close > sma5 and value > 10000000000):
             continue
 
         # ======================

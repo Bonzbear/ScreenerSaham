@@ -135,7 +135,7 @@ def get_support_15m(ticker):
         return None
 
     # Ambil data terakhir dan bersihkan NaN
-    lows = df_15m["Low"].tail(10).dropna()
+    lows = df_15m["Low"].tail(5).dropna()
 
     if len(lows) == 0:
         return None
@@ -232,10 +232,10 @@ def run_screener():
         # ======================
         signals = []
 
-        if volume > prev_volume and prev_close < close and close > sma5 and value > 10000000000:
+        if volume > prev_volume and prev_close < close and close > sma5 and value > 5000000000:
             signals.append("V1")
 
-        if volume > prev_volume and prev_close < close and close > sma5 and value > 10000000000 and (high/prev_close) >= 1.10:
+        if volume > prev_volume and prev_close < close and close > sma5 and value > 5000000000 and (high/prev_close) >= 1.10:
             signals.append("V2")
 
         if not signals:

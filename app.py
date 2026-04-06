@@ -275,7 +275,7 @@ def run_screener():
 
     if not df.empty:
         df = df.sort_values(by=["Probability","Score"], ascending=False)
-        df = df.head(5)
+        df = df.head(100)
         df.insert(0,"Rank",range(1,len(df)+1))
 
     return df

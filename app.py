@@ -173,9 +173,6 @@ def run_screener():
         TP = entry * 1.015   # target 1.5%
 
         reward_pct = ((TP - entry) / entry) * 100
-        # Filter risk max 2%
-        if risk_pct > 2:
-            continue
         # ======================
         # SIGNAL
         # ======================

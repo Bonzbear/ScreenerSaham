@@ -265,7 +265,7 @@ def run_screener():
         risk_pct = ((entry - SL) / entry) * 100
 
         if risk_pct > 2.5:
-        continue
+            continue
         
         reward_pct = ((TP - entry) / entry) * 100
 

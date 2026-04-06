@@ -123,11 +123,28 @@ def get_support_15m(ticker):
 
     df_15m = get_data_15m(ticker)
 
-    if df_15m.empty or len(df_15m) < 20:
+    if df_15m is None or df_15m.empty:
         return None
 
-    # ambil low dari 10 candle terakhir (~2.5 jam)
-    support = df_15m["Low"].tail(10).min()
+    # Handle jika multi-index
+    if isinstance(df_15m.columns, pd.MultiIndex):
+        df_15m.columns = df_15m.columns.droplevel(0)
+
+    # Pastikan kolom Low ada
+    if "Low" not in df_15m.columns:
+        return None
+
+    # Ambil data terakhir dan bersihkan NaN
+    lows = df_15m["Low"].tail(10).dropna()
+
+    if len(lows) == 0:
+        return None
+
+    support = lows.min()
+
+    # Validasi angka
+    if pd.isna(support):
+        return None
 
     return float(support)
 

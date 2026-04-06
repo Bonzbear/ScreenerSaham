@@ -19,6 +19,7 @@ def format_telegram(df):
 
     if df.empty:
         return "Tidak ada sinyal hari ini"
+
     indonesia_tz = pytz.timezone('Asia/Jakarta')
     now = datetime.datetime.now(indonesia_tz).strftime("%Y-%m-%d %H:%M")
 
@@ -27,10 +28,15 @@ def format_telegram(df):
     for i, row in df.head(10).iterrows():
 
         ticker = row["Ticker"].replace(".JK","")
+        warning = row.get("Warning","")
 
-        msg += f"{ticker}\n"
+        if warning:
+            msg += f"{ticker} {warning}\n"
+        else:
+            msg += f"{ticker}\n"
 
     msg += f"\nDisclaimer:\nSinyal yang diberikan bukan ajakan membeli/menjual saham. Segala keputusan trading merupakan tanggung jawab masing-masing. Gunakan manajemen risiko."
+
     return msg
    
 
@@ -120,6 +126,11 @@ def calculate_score(df):
     today = df.iloc[-1]
     prev = df.iloc[-2]
 
+    open_ = float(today["Open"])
+    high = float(today["High"])
+    low = float(today["Low"])
+    close = float(today["Close"])
+
     score = 0
 
     if float(prev["Close"]) < float(prev["SMA5"]): score += 125
@@ -127,9 +138,22 @@ def calculate_score(df):
     if float(today["Volume"]) > float(today["VOLMA5"]): score += 125
     if float(today["Low"]) > float(prev["Low"]): score += 125
     if float(today["High"]) > float(prev["High"]): score += 125
-    if (float(today["Open"]) - float(today["Low"])) > (float(today["High"]) - float(today["Close"])): score += 125
+    if (open_ - low) > (high - close): score += 125
     if float(today["Close"]) > float(today["VWAP"]): score += 125
     if float(prev["Close"]) < float(prev["VWAP"]): score += 125
+
+    # ======================
+    # 🔥 WICK ANALYSIS
+    # ======================
+    body = abs(close - open_)
+    upper_wick = high - max(close, open_)
+
+    if body > 0:
+        if upper_wick > body * 1.5:
+            score -= 100   # penalti wick panjang
+
+        if upper_wick > body * 2.5:
+            score -= 100   # penalti tambahan (ekstrem)
 
     return score
 
@@ -204,7 +228,22 @@ def run_screener():
         score = calculate_score(df)
 
         probability = round((winrate*0.6)+(score/10*0.4),2)
+        # ======================
+# 🔥 DETEKSI WARNING
+# ======================
+open_ = float(today["Open"])
+high = float(today["High"])
+low = float(today["Low"])
+close = float(today["Close"])
 
+body = abs(close - open_)
+upper_wick = high - max(close, open_)
+
+warning = ""
+
+if body > 0 and upper_wick > body * 1.5:
+    warning = "⚠️ Upper Wick"
+    
         results.append({
             "Ticker": ticker,
             "Signal": ", ".join(signals),
@@ -212,7 +251,8 @@ def run_screener():
             "Change%": round(change_pct,2),
             "Score": score,
             "Winrate": round(winrate,2),
-            "Probability": probability
+            "Probability": probability,
+            "Warning": warning
         })
 
         progress.progress((i+1)/total)

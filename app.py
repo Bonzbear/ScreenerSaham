@@ -283,21 +283,36 @@ def run_screener():
 # =========================
 # UI
 # =========================
+st.markdown("## 📊 Screener Saham")
+
 col1, col2, col3 = st.columns(3)
 
+# ======================
+# RUN SCREENER
+# ======================
 with col1:
-    if st.button("Run Screener"):
-        df = run_screener()
+    if st.button("▶️ Run Screener"):
+
+        with st.spinner("Sedang scan saham..."):
+            df = run_screener()
+
         if df.empty:
             st.warning("Tidak ada saham memenuhi kriteria")
         else:
             st.session_state["df"] = df
+            st.success(f"Ditemukan {len(df)} saham")
 
+# ======================
+# CLEAR CACHE
+# ======================
 with col2:
     if st.button("🔄 Clear Cache"):
         st.cache_data.clear()
         st.success("Cache dihapus")
 
+# ======================
+# TELEGRAM
+# ======================
 with col3:
     if st.button("📤 Kirim Telegram"):
         if "df" not in st.session_state:
@@ -306,3 +321,9 @@ with col3:
             msg = format_telegram(st.session_state["df"])
             send_telegram(msg)
             st.success("Berhasil dikirim!")
+
+# ======================
+# TAMPILKAN HASIL
+# ======================
+if "df" in st.session_state:
+    st.dataframe(st.session_state["df"], use_container_width=True)

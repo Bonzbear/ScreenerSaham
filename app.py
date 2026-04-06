@@ -247,8 +247,6 @@ def run_screener():
         # ======================
         support_15m = get_support_15m(ticker)
 
-        if support_15m is None:
-            continue
         SL_15m = support_15m * 0.995
         SL_max = entry * 0.98
         # ======================

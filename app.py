@@ -242,7 +242,7 @@ def run_screener():
         warning = ""
 
         if body > 0 and upper_wick > body * 1.5:
-        warning = "⚠️ Upper Wick"
+            warning = "⚠️ Upper Wick"
     
         results.append({
             "Ticker": ticker,

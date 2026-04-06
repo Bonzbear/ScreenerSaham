@@ -138,7 +138,7 @@ def calculate_score(df):
     if float(today["Volume"]) > float(today["VOLMA5"]): score += 125
     if float(today["Low"]) > float(prev["Low"]): score += 125
     if float(today["High"]) > float(prev["High"]): score += 125
-    if (float(today["Open"]) - float(today["Low"])) > (float(today["High"]) - float(today["Close"])): score += 125
+    if float(today["Open"]) - float(today["Low"]) > (float(today["High"]) - float(today["Close"])): score += 125
     if float(today["Close"]) > float(today["VWAP"]): score += 125
     if float(prev["Close"]) < float(prev["VWAP"]): score += 125
 

@@ -26,15 +26,23 @@ def format_telegram(df):
     msg = f"📊 Screener Saham\n{now}\n\n"
 
     for _, row in df.head(5).iterrows():
+
         ticker = row["Ticker"].replace(".JK","")
         warning = row["Warning"]
 
-        msg += f"{ticker} | SL: {row['SL']} | Risk: {row['Risk%']}%"
-        if warning:
-            msg += f" {warning}"
-        msg += "\n"
+        msg += (
+            f"{ticker}\n"
+            f"Entry : {row['Entry']}\n"
+            f"TP    : {row['TP']} (+{row['Reward%']}%)\n"
+            f"SL    : {row['SL']} (-{row['Risk%']}%)"
+        )
 
-    msg += "\nDisclaimer:\nBukan ajakan beli/jual. Gunakan manajemen risiko."
+        if warning:
+            msg += f"\n{warning}"
+
+        msg += "\n\n"
+
+    msg += "Disclaimer:\nBukan ajakan beli/jual. Gunakan manajemen risiko."
 
     return msg
 
@@ -174,7 +182,13 @@ def run_screener():
         # ======================
         SL = low * 0.995
         risk_pct = ((close - SL) / close) * 100
+        # ======================
+        # TARGET PROFIT
+        # ======================
+        entry = close
+        TP = entry * 1.015   # target 1.5%
 
+        reward_pct = ((TP - entry) / entry) * 100
         # Filter risk max 2%
         if risk_pct > 2:
             continue
@@ -199,11 +213,13 @@ def run_screener():
             "Ticker": ticker,
             "Signal": ", ".join(signals),
             "Close": round(close,2),
-            "Change%": round(change_pct,2),
-            "Score": score,
-            "Probability": probability,
+            "Entry": round(entry,2),
+            "TP": round(TP,2),
             "SL": round(SL,2),
             "Risk%": round(risk_pct,2),
+            "Reward%": round(reward_pct,2),
+            "Score": score,
+            "Probability": probability,
             "Warning": warning
         })
 

@@ -25,20 +25,18 @@ def format_telegram(df):
 
     msg = f"📊 Screener Saham\n{now}\n\n"
 
-    for i, row in df.head(10).iterrows():
-
+    for _, row in df.head(5).iterrows():
         ticker = row["Ticker"].replace(".JK","")
-        warning = row.get("Warning","")
+        warning = row["Warning"]
 
+        msg += f"{ticker} | SL: {row['SL']} | Risk: {row['Risk%']}%"
         if warning:
-            msg += f"{ticker} {warning}\n"
-        else:
-            msg += f"{ticker}\n"
+            msg += f" {warning}"
+        msg += "\n"
 
-    msg += f"\nDisclaimer:\nSinyal yang diberikan bukan ajakan membeli/menjual saham. Segala keputusan trading merupakan tanggung jawab masing-masing. Gunakan manajemen risiko."
+    msg += "\nDisclaimer:\nBukan ajakan beli/jual. Gunakan manajemen risiko."
 
     return msg
-   
 
 # =========================
 # CONFIG
@@ -75,51 +73,7 @@ def prepare_data(df):
     return df.dropna()
 
 # =========================
-# WINRATE
-# =========================
-@st.cache_data(ttl=600)
-def calculate_winrate(df):
-
-    total_v1 = win_v1 = 0
-    total_v2 = win_v2 = 0
-
-    for i in range(20, len(df)-1):
-
-        today = df.iloc[i]
-        prev = df.iloc[i-1]
-        nextd = df.iloc[i+1]
-
-        close = float(today["Close"])
-        high = float(today["High"])
-
-        volume = float(today["Volume"])
-        prev_volume = float(prev["Volume"])
-        prev_close = float(prev["Close"])
-
-        sma5 = float(today["SMA5"])
-        value = close * volume
-
-        gain = (float(nextd["High"]) - close) / close * 100
-
-        # V1
-        if volume > prev_volume and prev_close < close and close > sma5 and value > 5000000000:
-            total_v1 += 1
-            if gain >= 1.5:
-                win_v1 += 1
-
-        # V2
-        if volume > prev_volume and prev_close < close and close > sma5 and value > 5000000000 and (high/prev_close) >= 1.10:
-            total_v2 += 1
-            if gain >= 1.5:
-                win_v2 += 1
-
-    w1 = (win_v1/total_v1*100) if total_v1 else 0
-    w2 = (win_v2/total_v2*100) if total_v2 else 0
-
-    return w1, w2
-
-# =========================
-# SCORING
+# SCORE
 # =========================
 def calculate_score(df):
 
@@ -138,22 +92,19 @@ def calculate_score(df):
     if float(today["Volume"]) > float(today["VOLMA5"]): score += 125
     if float(today["Low"]) > float(prev["Low"]): score += 125
     if float(today["High"]) > float(prev["High"]): score += 125
-    if (float(today["Open"]) - float(today["Low"])) > (float(today["High"]) - float(today["Close"])): score += 125
+    if (open_ - low) > (high - close): score += 125
     if float(today["Close"]) > float(today["VWAP"]): score += 125
     if float(prev["Close"]) < float(prev["VWAP"]): score += 125
 
-    # ======================
-    # 🔥 WICK ANALYSIS
-    # ======================
+    # Penalti upper wick
     body = abs(close - open_)
     upper_wick = high - max(close, open_)
 
     if body > 0:
         if upper_wick > body * 1.5:
-            score -= 100   # penalti wick panjang
-
+            score -= 100
         if upper_wick > body * 2.5:
-            score -= 100   # penalti tambahan (ekstrem)
+            score -= 100
 
     return score
 
@@ -185,26 +136,27 @@ def run_screener():
         today = df.iloc[-1]
         prev = df.iloc[-2]
 
+        open_ = float(today["Open"])
         close = float(today["Close"])
         high = float(today["High"])
+        low = float(today["Low"])
         volume = float(today["Volume"])
-        prev_volume = float(prev["Volume"])
+
         prev_close = float(prev["Close"])
+        prev_volume = float(prev["Volume"])
 
         sma5 = float(today["SMA5"])
         value = close * volume
 
-        # ======================
-        # 🔥 CHANGE %
-        # ======================
+        # CHANGE %
         change_pct = ((close - prev_close) / prev_close) * 100
 
-        # ======================
-        # 🔥 FILTER ARA (>9%)
-        # ======================
         if change_pct > 9:
             continue
 
+        # ======================
+        # SIGNAL
+        # ======================
         signals = []
 
         if volume > prev_volume and prev_close < close and close > sma5 and value > 10000000000:
@@ -217,41 +169,41 @@ def run_screener():
             progress.progress((i+1)/total)
             continue
 
-        w1, w2 = calculate_winrate(df)
-
-        winrate = 0
-        if "V1" in signals:
-            winrate = w1
-        if "V2" in signals:
-            winrate = w2
-
-        score = calculate_score(df)
-
-        probability = round((winrate*0.6)+(score/10*0.4),2)
         # ======================
-        # 🔥 DETEKSI WARNING
+        # STOP LOSS
         # ======================
-        open_ = float(today["Open"])
-        high = float(today["High"])
-        low = float(today["Low"])
-        close = float(today["Close"])
+        SL = low * 0.995
+        risk_pct = ((close - SL) / close) * 100
 
+        # Filter risk max 2%
+        if risk_pct > 2:
+            continue
+
+        # ======================
+        # WARNING WICK
+        # ======================
         body = abs(close - open_)
         upper_wick = high - max(close, open_)
 
         warning = ""
-
         if body > 0 and upper_wick > body * 1.5:
-            warning = "⚠️ Upper Wick"
-    
+            warning = "⚠️"
+
+        # ======================
+        # SCORE & PROBABILITY
+        # ======================
+        score = calculate_score(df)
+        probability = round(score / 10, 2)
+
         results.append({
             "Ticker": ticker,
             "Signal": ", ".join(signals),
             "Close": round(close,2),
             "Change%": round(change_pct,2),
             "Score": score,
-            "Winrate": round(winrate,2),
             "Probability": probability,
+            "SL": round(SL,2),
+            "Risk%": round(risk_pct,2),
             "Warning": warning
         })
 
@@ -261,12 +213,13 @@ def run_screener():
 
     if not df.empty:
         df = df.sort_values(by=["Probability","Score"], ascending=False)
+        df = df.head(5)
         df.insert(0,"Rank",range(1,len(df)+1))
 
     return df
 
 # =========================
-# BUTTON
+# UI
 # =========================
 col1, col2, col3 = st.columns(3)
 
@@ -278,22 +231,19 @@ with col1:
         else:
             st.session_state["df"] = df
 
-with col3:
-    if st.button("📤 Kirim ke Telegram"):
-
-        if "df" not in st.session_state:
-            st.error("Jalankan screener dulu!")
-        else:
-            df = st.session_state["df"]
-            msg = format_telegram(df)
-            send_telegram(msg)
-            st.success("Berhasil dikirim!")
-
 with col2:
-    if st.button("🔄 Clear Cache"):
+    if st.button("Clear Cache"):
         st.cache_data.clear()
         st.success("Cache dihapus")
 
-# tampilkan data
+with col3:
+    if st.button("Kirim Telegram"):
+        if "df" not in st.session_state:
+            st.error("Jalankan screener dulu!")
+        else:
+            msg = format_telegram(st.session_state["df"])
+            send_telegram(msg)
+            st.success("Berhasil dikirim!")
+
 if "df" in st.session_state:
     st.dataframe(st.session_state["df"], use_container_width=True)

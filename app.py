@@ -249,19 +249,24 @@ def run_screener():
 
         if support_15m is None:
             continue
-
+        SL_15m = support_15m * 0.995
+        SL_max = entry * 0.98
         # ======================
         # ENTRY TP SL
         # ======================
         entry = round_price(close)
         TP = round_price(entry * 1.015, "up")
 
-        SL = round_price(support_15m * 0.995, "down")
+        SL = round_price(max(SL_15m, SL_max), "down")
 
         if SL >= entry:
             continue
 
         risk_pct = ((entry - SL) / entry) * 100
+
+        if risk_pct > 2.5:
+        continue
+        
         reward_pct = ((TP - entry) / entry) * 100
 
         # ======================

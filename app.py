@@ -23,7 +23,7 @@ def format_telegram(df):
     indonesia_tz = pytz.timezone('Asia/Jakarta')
     now = datetime.datetime.now(indonesia_tz).strftime("%Y-%m-%d %H:%M")
 
-    msg = f"📊 Screener Saham\n{now}\n\n"
+    msg = f"📊 Screener Saham\n{now}\n"
 
     for _, row in df.head(5).iterrows():
     

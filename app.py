@@ -30,9 +30,6 @@ def format_telegram(df):
 
         msg += (
             f"{ticker}\n"
-            f"Entry : {row['Entry']}\n"
-            f"TP    : {row['TP']} (+{row['Reward%']}%)\n"
-            f"SL    : {row['SL']} (-{row['Risk%']}%)"
         )
 
         if row["Warning"]:

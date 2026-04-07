@@ -26,14 +26,15 @@ def format_telegram(df):
     msg = f"📊 Screener Saham\n{now}\n\n"
 
     for _, row in df.head(5).iterrows():
-        ticker = row["Ticker"].replace(".JK","")
-
-        msg += (
-            f"{ticker}  "
-        )
-
+       
         if row["Warning"]:
-            msg += f" {row['Warning']}"
+             ticker = row["Ticker"].replace(".JK","")." "{row['Warning']}
+        else;
+        ticker = row["Ticker"].replace(".JK","")
+        
+        msg += (f"{ticker}\n")
+
+       
 
 
     msg += "Disclaimer:\nBukan ajakan beli/jual."

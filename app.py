@@ -28,7 +28,7 @@ def format_telegram(df):
     for _, row in df.head(5).iterrows():
        
         if row["Warning"]:
-             ticker = row["Ticker"].replace(".JK","")." "{row['Warning']}
+             ticker = row["Ticker"].replace(".JK"," ").(f"{row['Warning']}")
         else;
         ticker = row["Ticker"].replace(".JK","")
         

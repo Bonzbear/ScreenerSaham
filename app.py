@@ -29,13 +29,12 @@ def format_telegram(df):
         ticker = row["Ticker"].replace(".JK","")
 
         msg += (
-            f"{ticker}\n"
+            f"{ticker}  "
         )
 
         if row["Warning"]:
             msg += f" {row['Warning']}"
 
-        msg += "\n\n"
 
     msg += "Disclaimer:\nBukan ajakan beli/jual."
 

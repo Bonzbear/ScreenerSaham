@@ -50,8 +50,7 @@ def format_telegram(df):
     "⚠️ Menandakan saham dengan risiko tinggi / volatilitas tinggi\n\n"
     
     "<b>ℹ️ Disclaimer</b>\n"
-    "Bukan rekomendasi investasi. Lakukan analisa mandiri.\n"
-)
+    "Bukan rekomendasi investasi. Lakukan analisa mandiri.\n")
 
 
     return msg

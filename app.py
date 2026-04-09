@@ -22,7 +22,7 @@ def format_telegram(df):
 
     indonesia_tz = pytz.timezone('Asia/Jakarta')
     now = datetime.datetime.now(indonesia_tz).strftime("%Y-%m-%d %H:%M")
-    msg += "**🚨 SIGNAL TRADE 🚨**\n"
+    msg = "**🚨 SIGNAL TRADE 🚨**\n"
     msg += "━━━━━━━━━━━━━━\n"
 
 

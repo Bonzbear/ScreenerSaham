@@ -35,9 +35,9 @@ def format_telegram(df):
         
         msg += f"{ticker}\n"
         
-    msg += "\n**Entry: Pre-closing (pasang bid 3–5 tick di atas IEP untuk meningkatkan peluang match).**\n"   
+    msg += "\n<b>Entry: Pre-closing (pasang bid 3–5 tick di atas IEP untuk meningkatkan peluang match).**\n"   
     msg += "**TP fleksibel (bisa >1.5%/ARA)\nCL jika bertahan di bawah support hingga penutupan.**\n"
-    msg += "**Disclaimer: Informasi ini bukan rekomendasi investasi; lakukan analisa mandiri dan segala risiko ditanggung pengguna.**\n"
+    msg += "**Disclaimer: Informasi ini bukan rekomendasi investasi; lakukan analisa mandiri dan segala risiko ditanggung pengguna.<b>\n"
 
 
     return msg

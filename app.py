@@ -25,6 +25,8 @@ def format_telegram(df):
 
     msg = f"📊 Screener Saham\n{now}\n"
     msg += "Entry: Pre-closing (pasang bid 3–5 tick di atas IEP untuk meningkatkan peluang match).\n"
+    msg += "━━━━━━━━━━━━━━\n"
+    msg += "**🚨 SIGNAL TRADE 🚨**\n"
 
     for _, row in df.head(5).iterrows():
     
@@ -35,7 +37,7 @@ def format_telegram(df):
         
         msg += f"{ticker}\n"
        
-    msg += "TP ±1.5% | SL -3% (gunakan sebagai referensi, sesuaikan dengan strategi masing-masing)\n"
+    msg += "\nTP fleksibel (bisa >1.5%/ARA) | CL jika bertahan di bawah support hingga penutupan.\n"
     msg += "Disclaimer: Informasi ini bukan rekomendasi investasi; lakukan analisa mandiri dan segala risiko ditanggung pengguna.\n"
 
 

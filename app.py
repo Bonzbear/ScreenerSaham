@@ -37,7 +37,9 @@ def format_telegram(df):
 
 
     msg += (
-       "\n<b>📌 Entry</b>\n"
+       "<b>⚠️ Menandakan saham dengan risiko tinggi / volatilitas tinggi ⚠️</b>\n\n"
+    
+        "\n<b>📌 Entry</b>\n"
        "Pre-closing (bid 3-5 tick di atas IEP)\n\n"
     
        "<b>🎯 Target</b>\n"
@@ -45,9 +47,6 @@ def format_telegram(df):
     
        "<b>🛑 Risiko</b>\n"
        "CL jika bertahan di bawah support hingga penutupan\n\n"
-    
-       "<b>⚠️</b>\n"
-       "⚠️ Menandakan saham dengan risiko tinggi / volatilitas tinggi\n\n"
     
        "<b>ℹ️ Disclaimer</b>\n"
        "Bukan rekomendasi investasi. Lakukan analisa mandiri.\n")

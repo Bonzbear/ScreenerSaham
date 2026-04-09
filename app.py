@@ -34,7 +34,21 @@ def format_telegram(df):
             ticker = row["Ticker"].replace(".JK", "")
         
         msg += f"{ticker}\n"
-        
+
+
+    msg += (
+    "\n<b>📌 Entry</b>\n"
+    "Pre-closing (bid 3-5 tick di atas IEP)\n\n"
+    
+    "<b>🎯 Target</b>\n"
+    "TP fleksibel (bisa >1.5% / ARA)\n\n"
+    
+    "<b>🛑 Risiko</b>\n"
+    "CL jika bertahan di bawah support hingga penutupan\n\n"
+    
+    "<b>⚠️ Disclaimer</b>\n"
+    "Bukan rekomendasi investasi. Lakukan analisa mandiri.\n"
+)
     msg += "\n<b>Entry: Pre-closing (pasang bid 3–5 tick di atas IEP untuk meningkatkan peluang match).\n"   
     msg += "TP fleksibel (bisa >1.5%/ARA)\nCL jika bertahan di bawah support hingga penutupan.\n\n"
     msg += "Disclaimer: Informasi ini bukan rekomendasi investasi; lakukan analisa mandiri dan segala risiko ditanggung pengguna.</b>\n"

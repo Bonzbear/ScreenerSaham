@@ -36,7 +36,7 @@ def format_telegram(df):
         msg += f"{ticker}\n"
 
 
-   msg += (
+    msg += (
        "\n<b>📌 Entry</b>\n"
        "Pre-closing (bid 3-5 tick di atas IEP)\n\n"
     

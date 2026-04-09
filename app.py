@@ -33,11 +33,11 @@ def format_telegram(df):
         else:
             ticker = row["Ticker"].replace(".JK", "")
         
-        msg += f"{ticker}\n"
+        msg += f"<b>{ticker}<b>\n"
 
 
     msg += (
-       "<b>⚠️ Menandakan saham dengan risiko tinggi / volatilitas tinggi ⚠️</b>\n\n"
+       "\n<b>⚠️ Menandakan saham dengan risiko tinggi / volatilitas tinggi</b>\n"
     
         "\n<b>📌 Entry</b>\n"
        "Pre-closing (bid 3-5 tick di atas IEP)\n\n"

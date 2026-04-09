@@ -22,11 +22,9 @@ def format_telegram(df):
 
     indonesia_tz = pytz.timezone('Asia/Jakarta')
     now = datetime.datetime.now(indonesia_tz).strftime("%Y-%m-%d %H:%M")
-
-    msg = f"📊 Screener Saham\n{now}\n"
-    msg += "Entry: Pre-closing (pasang bid 3–5 tick di atas IEP untuk meningkatkan peluang match).\n"
-    msg += "━━━━━━━━━━━━━━\n"
     msg += "**🚨 SIGNAL TRADE 🚨**\n"
+    msg += "━━━━━━━━━━━━━━\n"
+
 
     for _, row in df.head(5).iterrows():
     
@@ -36,8 +34,9 @@ def format_telegram(df):
             ticker = row["Ticker"].replace(".JK", "")
         
         msg += f"{ticker}\n"
-       
-    msg += "\nTP fleksibel (bisa >1.5%/ARA) | CL jika bertahan di bawah support hingga penutupan.\n"
+        
+    msg += "Entry: Pre-closing (pasang bid 3–5 tick di atas IEP untuk meningkatkan peluang match).\n"   
+    msg += "\nTP fleksibel (bisa >1.5%/ARA)\nCL jika bertahan di bawah support hingga penutupan.\n"
     msg += "Disclaimer: Informasi ini bukan rekomendasi investasi; lakukan analisa mandiri dan segala risiko ditanggung pengguna.\n"
 
 

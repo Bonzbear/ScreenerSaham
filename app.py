@@ -33,7 +33,7 @@ def format_telegram(df):
         else:
             ticker = row["Ticker"].replace(".JK", "")
         
-        msg += f"<b>{ticker}<b>\n"
+        msg += f"<b>{ticker}</b>\n"
 
 
     msg += (

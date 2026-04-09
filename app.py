@@ -16,7 +16,7 @@ def send_telegram(msg):
     requests.post(url, data={"chat_id": CHAT_ID, "text": msg,"parse_mode": "HTML"})
 
 def format_telegram(df):
-no = 0
+    no = 0
     if df.empty:
         return "Tidak ada sinyal hari ini"
 

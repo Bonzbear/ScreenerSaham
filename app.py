@@ -222,7 +222,7 @@ def run_screener():
 
         change_pct = ((close - prev_close) / prev_close) * 100
 
-        if change_pct > 20:
+        if change_pct > 34:
             continue
 
         # ======================

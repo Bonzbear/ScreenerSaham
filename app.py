@@ -36,10 +36,15 @@ def format_telegram(df):
 def prepare_data(df):
     df["SMA5"] = df["Close"].rolling(5).mean()
     df["VOLMA20"] = df["Volume"].rolling(20).mean()
+    df["VOLMA5"] = df["Volume"].rolling(5).mean()
 
     df["Value"] = df["Close"] * df["Volume"]
     df["AvgValue20"] = df["Value"].rolling(20).mean()
     df["ValueRatio"] = df["Value"] / df["AvgValue20"]
+
+    df["VWAP"] = (
+        df["Volume"] * (df["High"] + df["Low"] + df["Close"]) / 3
+    ).cumsum() / df["Volume"].cumsum()
 
     return df.dropna()
 
@@ -54,6 +59,39 @@ def get_data(tickers):
         group_by="ticker",
         progress=False
     )
+
+# =========================
+# SCORE (LENGKAP)
+# =========================
+def calculate_score(df):
+
+    today = df.iloc[-1]
+    prev = df.iloc[-2]
+
+    open_ = float(today["Open"])
+    high = float(today["High"])
+    low = float(today["Low"])
+    close = float(today["Close"])
+
+    score = 0
+
+    if float(prev["Close"]) < float(prev["SMA5"]): score += 125
+    if float(today["Volume"]) > float(today["VOLMA20"]): score += 125
+    if float(today["Volume"]) > float(today["VOLMA5"]): score += 125
+    if float(today["Low"]) > float(prev["Low"]): score += 125
+    if float(today["High"]) > float(prev["High"]): score += 125
+    if (open_ - low) > (high - close): score += 125
+    if float(today["Close"]) > float(today["VWAP"]): score += 125
+    if float(prev["Close"]) < float(prev["VWAP"]): score += 125
+
+    # warning upper wick
+    body = abs(close - open_)
+    upper_wick = high - max(close, open_)
+
+    if body > 0 and upper_wick > body * 1.5:
+        score -= 100
+
+    return score
 
 # =========================
 # SIGNAL LOGIC
@@ -113,7 +151,6 @@ def backtest_1y(df):
         close_today = today["Close"]
         high_next = next_day["High"]
 
-        # cek apakah pernah mencapai +1.5%
         if high_next >= close_today * 1.015:
             wins += 1
 
@@ -127,6 +164,8 @@ def backtest_1y(df):
 # =========================
 # SCREENER
 # =========================
+MAX_SCORE = 1000  # aman (karena ada penalty)
+
 def run_screener(data):
 
     results = []
@@ -146,21 +185,29 @@ def run_screener(data):
         if len(df) < 30:
             continue
 
-        # cek kondisi hari ini
+        # hanya cek hari terakhir
         if not is_signal(df, len(df)-1):
             continue
 
+        score = calculate_score(df)
+        score_pct = (score / MAX_SCORE) * 100
+
         winrate = backtest_1y(df)
+
+        probability = (score_pct * 0.7) + (winrate * 0.3)
 
         results.append({
             "Ticker": ticker,
-            "Winrate (%)": winrate
+            "Score": score,
+            "Score (%)": round(score_pct,2),
+            "Winrate (%)": winrate,
+            "Probability (%)": round(probability,2)
         })
 
     df = pd.DataFrame(results)
 
     if not df.empty:
-        df = df.sort_values(by="Winrate (%)", ascending=False)
+        df = df.sort_values(by="Probability (%)", ascending=False)
         df.insert(0,"Rank",range(1,len(df)+1))
 
     return df

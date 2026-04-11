@@ -94,14 +94,17 @@ def prepare_data(df):
     df["VOLMA5"] = df["Volume"].rolling(5).mean()
 
     # =========================
-    # TAMBAHAN LIKUIDITAS
+    # LIKUIDITAS (WAJIB)
     # =========================
     df["Value"] = df["Close"] * df["Volume"]
     df["AvgValue20"] = df["Value"].rolling(20).mean()
     df["ValueRatio"] = df["Value"] / df["AvgValue20"]
 
+    # =========================
+    # VWAP
+    # =========================
     df["VWAP"] = (
-        df["Volume"] * (df["High"]+df["Low"]+df["Close"])/3
+        df["Volume"] * (df["High"] + df["Low"] + df["Close"]) / 3
     ).cumsum() / df["Volume"].cumsum()
 
     return df.dropna()
@@ -127,20 +130,6 @@ def get_data_15m(ticker):
         progress=False
     )
     return df
-
-# =========================
-# PREPARE
-# =========================
-def prepare_data(df):
-    df["SMA5"] = df["Close"].rolling(5).mean()
-    df["VOLMA20"] = df["Volume"].rolling(20).mean()
-    df["VOLMA5"] = df["Volume"].rolling(5).mean()
-
-    df["VWAP"] = (
-        df["Volume"] * (df["High"]+df["Low"]+df["Close"])/3
-    ).cumsum() / df["Volume"].cumsum()
-
-    return df.dropna()
 
 # =========================
 # SUPPORT 15M (AMAN)
@@ -222,7 +211,7 @@ def run_screener():
             continue
 
         df = prepare_data(df)
-        if len(df) < 30:
+        if len(df) < 20:
             continue
 
         today = df.iloc[-1]

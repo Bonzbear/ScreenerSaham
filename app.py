@@ -217,7 +217,7 @@ def run_screener(data):
 
         winrate = backtest_1y(df)
 
-        probability = (score_pct * 0.7) + (winrate * 0.3)
+        probability = (score_pct * 0.3) + (winrate * 0.7)
 
         results.append({
             "Ticker": ticker,

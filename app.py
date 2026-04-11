@@ -13,7 +13,7 @@ TICKERS = ['AALI.JK', 'ABBA.JK', 'ABDA.JK', 'ABMM.JK', 'ACES.JK', 'ACST.JK', 'AD
 # =========================
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+    requests.post(url, data={"chat_id": CHAT_ID, "text": msg,"parse_mode": "HTML"})
 
 def format_telegram(df):
     no = 0

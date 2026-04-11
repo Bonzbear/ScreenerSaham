@@ -261,7 +261,7 @@ def run_screener():
             value > 5_000_000_000 and       # value harian
             value_ratio > 1.5               # momentum uang masuk
         ):
-    continue
+        continue
 
         # ======================
         # ENTRY TP

@@ -248,7 +248,7 @@ def run_screener():
             prev_close < close and
             close > sma5 and
             value > 5_000_000_000 and       # value harian
-            value_ratio > 1.5               # momentum uang masuk
+            value_ratio > 2              # momentum uang masuk
         ):
             continue
 

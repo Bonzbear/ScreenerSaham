@@ -202,8 +202,7 @@ def backtest_ev(df):
 
         ret = (high_next - close_today) / close_today
 
-        # cap sesuai TP
-        ret = min(ret, 0.015)
+
 
         returns.append(ret)
 

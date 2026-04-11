@@ -87,6 +87,25 @@ def round_price(price, direction="nearest"):
     else:
         return int(round(price / tick) * tick)
 
+
+def prepare_data(df):
+    df["SMA5"] = df["Close"].rolling(5).mean()
+    df["VOLMA20"] = df["Volume"].rolling(20).mean()
+    df["VOLMA5"] = df["Volume"].rolling(5).mean()
+
+    # =========================
+    # TAMBAHAN LIKUIDITAS
+    # =========================
+    df["Value"] = df["Close"] * df["Volume"]
+    df["AvgValue20"] = df["Value"].rolling(20).mean()
+    df["ValueRatio"] = df["Value"] / df["AvgValue20"]
+
+    df["VWAP"] = (
+        df["Volume"] * (df["High"]+df["Low"]+df["Close"])/3
+    ).cumsum() / df["Volume"].cumsum()
+
+    return df.dropna()
+    
 # =========================
 # DATA
 # =========================
@@ -218,18 +237,31 @@ def run_screener():
         prev_volume = float(prev["Volume"])
 
         sma5 = float(today["SMA5"])
-        value = close * volume
+        value = float(today["Value"])
+        avg_value = float(today["AvgValue20"])
+        value_ratio = float(today["ValueRatio"])
+        avg_volume = float(today["VOLMA20"])
 
         change_pct = ((close - prev_close) / prev_close) * 100
 
         if change_pct > 34:
             continue
-
+        # ======================
+        # FILTER LIKUIDITAS (BARU)
+        # ======================
+        if not (avg_value > 5_000_000_000 and avg_volume > 1_000_000):
+            continue
         # ======================
         # SIGNAL
         # ======================
-        if not (volume > prev_volume and prev_close < close and close > sma5 and value > 10000000000):
-            continue
+        if not (
+            volume > prev_volume and
+            prev_close < close and
+            close > sma5 and
+            value > 5_000_000_000 and       # value harian
+            value_ratio > 1.5               # momentum uang masuk
+        ):
+    continue
 
         # ======================
         # ENTRY TP

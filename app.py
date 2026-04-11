@@ -158,10 +158,36 @@ def is_signal(df, i):
 # =========================
 # BACKTEST (HIGH BESOK)
 # =========================
-def backtest_1y(df):
+# def backtest_1y(df):
 
-    wins = 0
-    total = 0
+#    wins = 0
+#    total = 0
+
+#    for i in range(20, len(df)-1):
+
+#        if not is_signal(df, i):
+#            continue
+
+#        today = df.iloc[i]
+#        next_day = df.iloc[i+1]
+
+#        close_today = today["Close"]
+#        high_next = next_day["High"]
+
+#        if high_next >= close_today * 1.015:
+#            wins += 1
+
+#        total += 1
+
+#    if total == 0:
+#        return 0
+
+#    return round((wins / total) * 100, 2)
+
+
+def backtest_ev(df):
+
+    returns = []
 
     for i in range(20, len(df)-1):
 
@@ -174,16 +200,21 @@ def backtest_1y(df):
         close_today = today["Close"]
         high_next = next_day["High"]
 
-        if high_next >= close_today * 1.015:
-            wins += 1
+        ret = (high_next - close_today) / close_today
 
-        total += 1
+        # cap sesuai TP
+        ret = min(ret, 0.015)
 
-    if total == 0:
-        return 0
+        returns.append(ret)
 
-    return round((wins / total) * 100, 2)
+    if len(returns) == 0:
+        return 0, 0
 
+    winrate = sum(1 for r in returns if r >= 0.015) / len(returns)
+    ev = sum(returns) / len(returns)
+
+    return round(winrate * 100, 2), round(ev * 100, 2)
+    
 # =========================
 # SCREENER
 # =========================
@@ -215,7 +246,7 @@ def run_screener(data):
         score = calculate_score(df)
         score_pct = (score / MAX_SCORE) * 100
 
-        winrate = backtest_1y(df)
+        winrate, ev = backtest_ev(df)
 
         probability = (score_pct * 0.3) + (winrate * 0.7)
 
@@ -223,7 +254,8 @@ def run_screener(data):
             "Ticker": ticker,
             "Score (%)": round(score_pct,2),
             "Winrate (%)": winrate,
-            "Probability (%)": round(probability,2)
+            "Probability (%)": round(probability,2),
+            "EV (%)": ev   # 👉 hanya sebagai acuan
         })
 
     df = pd.DataFrame(results)

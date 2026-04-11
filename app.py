@@ -291,14 +291,8 @@ def run_screener():
 
         results.append({
             "Ticker": ticker,
-            "Entry": entry,
-            "TP": TP,
-            "SL": SL,
-            "Risk%": round(risk_pct,2),
-            "Reward%": round(reward_pct,2),
             "Score": score,
             "Probability": probability,
-            "SL Source": sl_source,
             "Warning": warning
         })
 

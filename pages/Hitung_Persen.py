@@ -12,8 +12,6 @@ if ticker:
     tk = yf.Ticker(ticker)
     df = tk.history(period="5d")
 
-    st.write(df.tail())  # debug (boleh dihapus nanti)
-
     if len(df) >= 2:
         prev_close = df["Close"].iloc[-2]
         today = df.iloc[-1]

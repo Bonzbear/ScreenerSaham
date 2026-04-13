@@ -4,15 +4,20 @@ import pandas as pd
 
 st.title("Hitung Persentase Saham")
 
-ticker = st.text_input("Ticker (contoh: BBCA)")
+tickers_input = st.text_area("Ticker (pisah koma)")
 
-if ticker:
-    ticker = ticker.upper() + ".JK"
+if tickers_input:
+    tickers = [t.strip().upper() + ".JK" for t in tickers_input.split(",")]
 
-    tk = yf.Ticker(ticker)
-    df = tk.history(period="5d")
+    results = []
 
-    if len(df) >= 2:
+    for ticker in tickers:
+        tk = yf.Ticker(ticker)
+        df = tk.history(period="5d")
+
+        if len(df) < 2:
+            continue
+
         prev_close = df["Close"].iloc[-2]
         today = df.iloc[-1]
 
@@ -24,10 +29,14 @@ if ticker:
         low_pct = (low - prev_close) / prev_close * 100
         close_pct = (close - prev_close) / prev_close * 100
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric("High %", f"{high_pct:.2f}%")
-        col2.metric("Low %", f"{low_pct:.2f}%")
-        col3.metric("Close %", f"{close_pct:.2f}%")
+        results.append({
+            "Ticker": ticker.replace(".JK",""),
+            "High %": high_pct,
+            "Low %": low_pct,
+            "Close %": close_pct
+        })
 
+    if results:
+        st.dataframe(pd.DataFrame(results))
     else:
-        st.error("Data tidak cukup")
+        st.error("Tidak ada data")

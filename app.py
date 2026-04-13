@@ -296,13 +296,18 @@ with col2:
         st.success("Cache dihapus")
 
 with col3:
-    if st.button("📤 Telegram"):
-        if "df" not in st.session_state:
-            st.error("Run dulu")
-        else:
-            msg = format_telegram(st.session_state["df"])
-            send_telegram(msg)
-            st.success("Terkirim")
+    key = st.text_input("Key", type="password")
+
+    if key == "rahasia123":
+        if st.button("📤 Telegram"):
+            if "df" not in st.session_state:
+                st.error("Run dulu")
+            else:
+                msg = format_telegram(st.session_state["df"])
+                send_telegram(msg)
+                st.success("Terkirim")
+    else:
+        st.caption("Akses terbatas")
 
 if "df" in st.session_state:
     st.dataframe(st.session_state["df"], use_container_width=True)

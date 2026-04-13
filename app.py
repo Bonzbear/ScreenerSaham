@@ -137,7 +137,11 @@ def is_signal(df, i):
     avg_volume = today["VOLMA20"]
 
     change_pct = ((close - prev_close) / prev_close) * 100
-
+    
+    if close > 9_700:
+        return False
+    if close < 50:
+        return False
     if change_pct > 34:
         return False
 

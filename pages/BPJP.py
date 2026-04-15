@@ -55,8 +55,8 @@ def is_screening_signal(df, i):
     if today["Close"] <= today["SMA5"]:
         return False
 
-    if today["Value"] <= MIN_VALUE:
-        return False
+    #if today["Value"] <= MIN_VALUE:
+      #  return False
 
    # if today["High"] / prev["Close"] < 1.10:
     #    return False

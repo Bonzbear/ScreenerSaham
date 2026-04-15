@@ -32,7 +32,6 @@ def get_data(ticker):
     if df is None or df.empty:
         return None
 
-    # FIX MultiIndex
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
 
@@ -45,7 +44,6 @@ def get_data(ticker):
     df["AvgVolume20"] = df["Volume"].rolling(20).mean()
     df["Value"] = df["Close"] * df["Volume"]
 
-    # drop minimal
     df = df.dropna(subset=["SMA5","AvgVolume20"])
 
     return df
@@ -69,21 +67,32 @@ def is_signal(df, i):
     if today["Value"] <= MIN_VALUE:
         return False
 
-    if today["Close"] < prev["Close"] * 1.08:  # diturunkan dari 10%
+    if today["Close"] < prev["Close"] * 1.08:
         return False
 
     return True
 
 # =========================
-# BACKTEST
+# KUMPULKAN SIGNAL
 # =========================
-def backtest(df):
-    results = []
+def get_signals(df):
+    signals = []
 
     for i in range(21, len(df)-1):
+        if is_signal(df, i):
+            signals.append(i)
 
-        if not is_signal(df, i):
-            continue
+    return signals
+
+# =========================
+# BACKTEST (HANYA DARI SIGNAL)
+# =========================
+def backtest(df):
+    signals = get_signals(df)
+
+    results = []
+
+    for i in signals:
 
         today = df.iloc[i]
         next_day = df.iloc[i+1]
@@ -103,10 +112,11 @@ def backtest(df):
         else:
             results.append(0)
 
-    total = len(results)
-    winrate = sum(results) / total if total > 0 else 0
+    total_signal = len(signals)
+    total_trade = len(results)
+    winrate = sum(results) / total_trade if total_trade > 0 else 0
 
-    return total, winrate
+    return total_signal, total_trade, winrate
 
 # =========================
 # MAIN
@@ -123,19 +133,19 @@ if st.button("Run Backtest"):
     for idx, ticker in enumerate(tickers):
 
         progress.progress((idx + 1) / total_ticker)
-        st.write(f"Processing {ticker}")
 
         df = get_data(ticker)
 
         if df is None or len(df) < 50:
             continue
 
-        total, winrate = backtest(df)
+        total_signal, total_trade, winrate = backtest(df)
 
-        if total > 0:
+        if total_signal > 0:
             summary.append({
                 "Ticker": ticker,
-                "Trades": total,
+                "Signal": total_signal,
+                "Trade": total_trade,
                 "Winrate (%)": round(winrate * 100, 2)
             })
 
@@ -147,19 +157,22 @@ if st.button("Run Backtest"):
     st.write("## Hasil Backtest")
 
     if result_df.empty:
-        st.warning("Tidak ada hasil. Coba longgarkan filter atau cek data.")
+        st.warning("Tidak ada sinyal sama sekali.")
     else:
         result_df = result_df.sort_values(by="Winrate (%)", ascending=False)
 
         st.dataframe(result_df)
 
-        total_trades = result_df["Trades"].sum()
+        total_signal_all = result_df["Signal"].sum()
+        total_trade_all = result_df["Trade"].sum()
+
         weighted_winrate = (
-            (result_df["Trades"] * result_df["Winrate (%)"]).sum() / total_trades
-        )
+            (result_df["Trade"] * result_df["Winrate (%)"]).sum() / total_trade_all
+        ) if total_trade_all > 0 else 0
 
         st.write("### Summary")
-        st.write(f"Total Trades: {total_trades}")
+        st.write(f"Total Signal: {total_signal_all}")
+        st.write(f"Total Trade: {total_trade_all}")
         st.write(f"Overall Winrate: {weighted_winrate:.2f}%")
 
         st.success("Selesai ✅")

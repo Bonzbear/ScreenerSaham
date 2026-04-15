@@ -36,7 +36,7 @@ def get_data(ticker):
     df["Value"] = df["Close"] * df["Volume"]
 
     df.dropna(inplace=True)
-
+    print(ticker, "rows:", len(df))
     return df
 
 # =========================

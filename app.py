@@ -95,7 +95,7 @@ def calculate_score(df):
     high = float(today["High"])
     low = float(today["Low"])
     close = float(today["Close"])
-
+    warning = ""
     score = 0
 
     if float(prev["Close"]) < float(prev["SMA5"]): score += 125

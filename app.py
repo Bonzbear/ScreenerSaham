@@ -70,6 +70,7 @@ def prepare_data(df):
     ).cumsum() / df["Volume"].cumsum()
 
     return df.dropna()
+    
 
 # =========================
 # DATA (1 TAHUN)
@@ -117,7 +118,15 @@ def calculate_score(df):
  
 
     return score, warning
-    
+
+def get_ara_limit(price):
+
+    if price < 200:
+        return 0.35
+    elif price <= 5000:
+        return 0.25
+    else:
+        return 0.20
 # =========================
 # SIGNAL LOGIC
 # =========================
@@ -138,13 +147,14 @@ def is_signal(df, i):
     value_ratio = today["ValueRatio"]
     avg_volume = today["VOLMA20"]
 
-    change_pct = ((close - prev_close) / prev_close) * 100
+    change_pct = (close - prev_close) / prev_close
+    ara = get_ara_limit(prev_close)
     
     if close > 9_700:
         return False
     if close < 50:
         return False
-    if change_pct > 34:
+    if ara == 0.25 and change_pct >= 0.245:
         return False
 
     if not (avg_value > 5_000_000_000 and avg_volume > 1_000_000):

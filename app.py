@@ -113,9 +113,11 @@ def calculate_score(df):
 
     if body > 0 and upper_wick > body * 1.5:
         score -= 100
+        warning = "⚠️"
+ 
 
-    return score
-
+    return score, warning
+    
 # =========================
 # SIGNAL LOGIC
 # =========================
@@ -246,7 +248,7 @@ def run_screener(data):
         if not is_signal(df, len(df)-1):
             continue
 
-        score = calculate_score(df)
+        score, warning = calculate_score(df)
         score_pct = (score / MAX_SCORE) * 100
 
         winrate, ev = backtest_ev(df)
@@ -255,6 +257,7 @@ def run_screener(data):
 
         results.append({
             "Ticker": ticker,
+            "Warning": warning,
             "Score (%)": round(score_pct,2),
             "Winrate (%)": winrate,
             "Probability (%)": round(probability,2),

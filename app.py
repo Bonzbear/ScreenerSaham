@@ -156,6 +156,8 @@ def is_signal(df, i):
         return False
     if ara == 0.25 and change_pct >= 0.245:
         return False
+    if ara == 0.35 and change_pct >= 0.34:
+        return False
 
     if not (avg_value > 5_000_000_000 and avg_volume > 1_000_000):
         return False

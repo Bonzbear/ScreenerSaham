@@ -217,7 +217,7 @@ def compute_metrics(returns):
     }
 
 
-def walk_forward_backtest(df, train_size=504, test_size=126):
+def walk_forward_backtest(df, train_size=504, test_size=256):
 
     all_results = []
     start = 0

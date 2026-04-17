@@ -79,7 +79,7 @@ def prepare_data(df):
 def get_data(tickers):
     return yf.download(
         tickers=" ".join(tickers),
-        period="1y",
+        period="5y",
         group_by="ticker",
         progress=False
     )
@@ -154,7 +154,7 @@ def is_signal(df, i):
         return False
     if close < 50:
         return False
-    if ara == 0.25 and change_pct >= 0.245:
+    if ara == 0.25 and change_pct >= 0.24:
         return False
     if ara == 0.35 and change_pct >= 0.34:
         return False
@@ -172,36 +172,6 @@ def is_signal(df, i):
         return False
 
     return True
-
-# =========================
-# BACKTEST (HIGH BESOK)
-# =========================
-# def backtest_1y(df):
-
-#    wins = 0
-#    total = 0
-
-#    for i in range(20, len(df)-1):
-
-#        if not is_signal(df, i):
-#            continue
-
-#        today = df.iloc[i]
-#        next_day = df.iloc[i+1]
-
-#        close_today = today["Close"]
-#        high_next = next_day["High"]
-
-#        if high_next >= close_today * 1.015:
-#            wins += 1
-
-#        total += 1
-
-#    if total == 0:
-#        return 0
-
-#    return round((wins / total) * 100, 2)
-
 
 def backtest_ev(df):
 

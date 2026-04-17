@@ -247,7 +247,7 @@ def aggregate_results(results):
         return None
         
     total_trades = sum(r["trades"] for r in results)
-    if total_trades < 30:
+    if total_trades < 10:
         return None
         
     return {

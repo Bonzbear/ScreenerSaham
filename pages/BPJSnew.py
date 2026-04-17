@@ -234,7 +234,7 @@ def walk_forward_backtest(df, train_size=504, test_size=252):
         returns = backtest_window(test_df)
         metrics = compute_metrics(returns)
 
-        if metrics and metrics["trades"] >= 30:
+        if metrics and metrics["trades"] >= 10:
             all_results.append(metrics)
 
         start += test_size

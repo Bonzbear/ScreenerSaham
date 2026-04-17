@@ -116,9 +116,8 @@ def calculate_score(df):
     if body > 0 and upper_wick > body * 1.5:
         score -= 100
         warning = "⚠️"
- 
-    return score, warning
 
+    return score, warning
 
 def get_ara_limit(price):
     if price < 200:
@@ -150,7 +149,7 @@ def is_signal(df, i):
 
     change_pct = (close - prev_close) / prev_close
     ara = get_ara_limit(prev_close)
-    
+
     if close > 9700 or close < 50:
         return False
 
@@ -174,7 +173,7 @@ def is_signal(df, i):
     return True
 
 # =========================
-# BACKTEST (INSTITUTIONAL)
+# BACKTEST (NO BIAS)
 # =========================
 def backtest_window(df):
     returns = []
@@ -191,32 +190,23 @@ def backtest_window(df):
 
     return returns
 
-
 def compute_metrics(returns):
     if len(returns) == 0:
         return None
 
     returns = np.array(returns)
 
-    winrate = np.mean(returns >= 0.015)
-    ev = np.mean(returns)
-
-    sharpe = np.mean(returns) / (np.std(returns) + 1e-9)
-
-    equity = np.cumprod(1 + returns)
-    peak = np.maximum.accumulate(equity)
-    drawdown = (equity - peak) / peak
-    max_dd = drawdown.min()
-
     return {
         "trades": len(returns),
-        "winrate": winrate * 100,
-        "ev": ev * 100,
-        "sharpe": sharpe,
-        "max_dd": max_dd * 100
+        "winrate": np.mean(returns >= 0.015) * 100,
+        "ev": np.mean(returns) * 100,
+        "sharpe": np.mean(returns) / (np.std(returns) + 1e-9),
+        "max_dd": (np.min(np.cumprod(1 + returns) / np.maximum.accumulate(np.cumprod(1 + returns)) - 1)) * 100
     }
 
-
+# =========================
+# WALK FORWARD
+# =========================
 def walk_forward_backtest(df, train_size=504, test_size=126):
 
     all_results = []
@@ -241,24 +231,41 @@ def walk_forward_backtest(df, train_size=504, test_size=126):
 
     return all_results
 
-
+# =========================
+# AGGREGATE (HIGH ACCURACY)
+# =========================
 def aggregate_results(results):
+
     if not results:
         return None
-        
+
     total_trades = sum(r["trades"] for r in results)
-    if total_trades < 10:
+
+    if total_trades < 20:
         return None
-        
+
+    winrates = [r["winrate"] for r in results]
+
+    # consistency filter
+    consistency = sum(1 for w in winrates if w > 50) / len(winrates)
+    if consistency < 0.6:
+        return None
+
+    winrate = np.median(winrates)
+    ev = np.median([r["ev"] for r in results])
+    sharpe = np.median([r["sharpe"] for r in results])
+    drawdown = np.min([r["max_dd"] for r in results])
+
     return {
-        "winrate": np.mean([r["winrate"] for r in results]),
-        "ev": np.mean([r["ev"] for r in results]),
-        "sharpe": np.mean([r["sharpe"] for r in results]),
-        "drawdown": np.min([r["max_dd"] for r in results])
+        "winrate": winrate,
+        "ev": ev,
+        "sharpe": sharpe,
+        "drawdown": drawdown,
+        "trades": total_trades
     }
 
 # =========================
-# SCREENER
+# SCREENER (HIGH ACCURACY)
 # =========================
 MAX_SCORE = 1000
 
@@ -296,12 +303,25 @@ def run_screener(data):
         winrate = agg["winrate"]
         ev = agg["ev"]
         sharpe = agg["sharpe"]
+        drawdown = agg["drawdown"]
+        trades = agg["trades"]
+
+        # quality filter
+        if winrate < 55 or sharpe < 0.5:
+            continue
+
+        confidence = min(1, trades / 100)
 
         probability = (
-            score_pct * 0.25 +
+            score_pct * 0.2 +
             winrate * 0.5 +
-            max(0, sharpe) * 10
+            max(0, sharpe) * 15
         )
+
+        if drawdown < -15:
+            probability *= 0.7
+
+        probability *= confidence
 
         results.append({
             "Ticker": ticker,
@@ -309,6 +329,7 @@ def run_screener(data):
             "Score (%)": round(score_pct,2),
             "Winrate (%)": round(winrate,2),
             "Sharpe": round(sharpe,2),
+            "Trades": trades,
             "Probability (%)": round(probability,2),
             "EV (%)": round(ev,2)
         })

@@ -234,7 +234,7 @@ def walk_forward_backtest(df, train_size=504, test_size=126):
         returns = backtest_window(test_df)
         metrics = compute_metrics(returns)
 
-        if metrics and metrics["trades"] >= 1:
+        if metrics 
             all_results.append(metrics)
 
         start += test_size
@@ -245,7 +245,11 @@ def walk_forward_backtest(df, train_size=504, test_size=126):
 def aggregate_results(results):
     if not results:
         return None
+     total_trades = sum(r["trades"] for r in results)
 
+    if total_trades < 30:
+        return None
+        
     return {
         "winrate": np.mean([r["winrate"] for r in results]),
         "ev": np.mean([r["ev"] for r in results]),

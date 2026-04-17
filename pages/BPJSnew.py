@@ -274,7 +274,7 @@ def run_screener(data):
 
         df = prepare_data(df)
 
-        if len(df) < 300:
+        if len(df) < 200:
             continue
 
         if not is_signal(df, len(df)-1):

@@ -245,7 +245,7 @@ def walk_forward_backtest(df, train_size=504, test_size=126):
 def aggregate_results(results):
     if not results:
         return None
-     total_trades = sum(r["trades"] for r in results)
+    total_trades = sum(r["trades"] for r in results)
 
     if total_trades < 30:
         return None

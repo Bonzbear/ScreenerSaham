@@ -1,24 +1,43 @@
 import streamlit as st
 import pandas as pd
+import requests
+from io import StringIO
 from datetime import datetime
 
 st.set_page_config(page_title="IDX Emiten", layout="wide")
 
 st.title("📊 IDX Emiten Dashboard")
-st.caption("Daftar saham Indonesia (IDX) | Tanpa scraping langsung")
+st.caption("Stable version (no IDX scraping, no urllib error)")
 
 # =========================
-# DATA IDX (PUBLIC CSV)
+# FETCH DATA (SAFE)
 # =========================
-@st.cache_data
+@st.cache_data(ttl=3600)
 def load_idx_data():
+
     url = "https://raw.githubusercontent.com/selva86/datasets/master/IDX_stocks.csv"
-    
-    df = pd.read_csv(url)
 
-    return df
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
 
-df = load_idx_data()
+    try:
+        r = requests.get(url, headers=headers, timeout=10)
+
+        if r.status_code != 200:
+            return None, f"HTTP Error {r.status_code}"
+
+        # convert ke dataframe
+        csv_data = StringIO(r.text)
+        df = pd.read_csv(csv_data)
+
+        return df, None
+
+    except Exception as e:
+        return None, str(e)
+
+
+df, error = load_idx_data()
 
 # =========================
 # METRICS
@@ -26,10 +45,17 @@ df = load_idx_data()
 col1, col2 = st.columns(2)
 
 with col1:
-    st.metric("Total Emiten", len(df))
+    st.metric("Total Emiten", len(df) if df is not None else 0)
 
 with col2:
     st.metric("Last Update", datetime.now().strftime("%H:%M:%S"))
+
+# =========================
+# ERROR HANDLING
+# =========================
+if error:
+    st.error(error)
+    st.stop()
 
 # =========================
 # TABLE

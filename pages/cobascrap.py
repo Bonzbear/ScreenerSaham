@@ -3,32 +3,47 @@ import requests
 import pandas as pd
 from datetime import datetime
 
-# ===== CONFIG =====
-st.set_page_config(
-    page_title="IDX Market Dashboard",
-    layout="wide"
-)
+st.set_page_config(page_title="IDX Market", layout="wide")
 
 st.title("📊 IDX Market Data (All Stocks)")
 st.caption("Data delay ±10–15 menit | Source: IDX")
 
-# ===== FETCHER =====
-@st.cache_data(ttl=300)  # cache 5 menit
-def fetch_idx_data():
-    url = "https://www.idx.co.id/primary/TradingSummary/GetStockSummary"
+# ===== SESSION SETUP (ANTI 403) =====
+def create_session():
+    session = requests.Session()
+
     headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.idx.co.id/",
+        "Origin": "https://www.idx.co.id",
+        "Connection": "keep-alive"
     }
 
+    session.headers.update(headers)
+
+    # 🔥 IMPORTANT: hit homepage dulu (ambil cookies)
+    session.get("https://www.idx.co.id/")
+
+    return session
+
+
+# ===== FETCH DATA =====
+@st.cache_data(ttl=300)
+def fetch_idx_data():
+    session = create_session()
+
+    url = "https://www.idx.co.id/primary/TradingSummary/GetStockSummary"
+
     try:
-        r = requests.get(url, headers=headers, timeout=10)
+        r = session.get(url, timeout=10)
         r.raise_for_status()
+
         json_data = r.json()
-
         stocks = json_data.get("Data", [])
-        parsed = []
 
+        parsed = []
         for s in stocks:
             parsed.append({
                 "Symbol": s.get("Code"),
@@ -40,9 +55,7 @@ def fetch_idx_data():
                 "Freq": to_int(s.get("Frequency")),
             })
 
-        df = pd.DataFrame(parsed)
-
-        return df
+        return pd.DataFrame(parsed)
 
     except Exception as e:
         st.error(f"Error fetching data: {e}")
@@ -63,10 +76,10 @@ def to_int(val):
         return None
 
 
-# ===== LOAD DATA =====
+# ===== LOAD =====
 df = fetch_idx_data()
 
-# ===== INFO HEADER =====
+# ===== HEADER =====
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -76,19 +89,15 @@ with col2:
     st.metric("Last Update", datetime.now().strftime("%H:%M:%S"))
 
 with col3:
-    st.metric("Data Source", "IDX")
+    st.metric("Status", "OK" if not df.empty else "FAILED")
 
-# ===== DISPLAY TABLE =====
+# ===== TABLE =====
 st.subheader("📋 Seluruh Saham")
 
 if not df.empty:
-    st.dataframe(
-        df,
-        use_container_width=True,
-        height=600
-    )
+    st.dataframe(df, use_container_width=True, height=600)
 else:
-    st.warning("Data tidak tersedia")
+    st.warning("Data kosong / gagal fetch")
 
 # ===== DOWNLOAD =====
 st.download_button(
@@ -98,7 +107,7 @@ st.download_button(
     mime="text/csv"
 )
 
-# ===== AUTO REFRESH BUTTON =====
-if st.button("🔄 Refresh Data"):
+# ===== REFRESH =====
+if st.button("🔄 Refresh"):
     st.cache_data.clear()
     st.rerun()

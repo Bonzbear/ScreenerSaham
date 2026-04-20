@@ -236,7 +236,7 @@ def run_screener(data):
         winrate, ev = backtest_ev(df)
 
         probability = (score_pct * 0.3) + (winrate * 0.7)
-
+        close = df['Close'].iloc[-1]
         results.append({
             "Ticker": ticker,
             "Price": close,

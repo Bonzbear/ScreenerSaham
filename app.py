@@ -239,6 +239,7 @@ def run_screener(data):
 
         results.append({
             "Ticker": ticker,
+            "Price": close,
             "Warning": warning,
             "Score (%)": round(score_pct,2),
             "Winrate (%)": winrate,

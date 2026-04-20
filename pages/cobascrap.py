@@ -5,31 +5,20 @@ from datetime import datetime
 st.set_page_config(page_title="IDX Emiten", layout="wide")
 
 st.title("📊 IDX Emiten Dashboard")
-st.caption("Safe mode (tanpa scraping IDX langsung)")
+st.caption("Daftar saham Indonesia (IDX) | Tanpa scraping langsung")
 
 # =========================
-# DATA STATIC (AMAN)
+# DATA IDX (PUBLIC CSV)
 # =========================
 @st.cache_data
-def load_data():
-    # sumber alternatif (CSV publik GitHub - stabil)
-    url = "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/master/data/constituents.csv"
+def load_idx_data():
+    url = "https://raw.githubusercontent.com/selva86/datasets/master/IDX_stocks.csv"
     
-    # NOTE: ini contoh fallback (bukan IDX asli)
-    # nanti bisa diganti dengan dataset IDX kalau kamu punya
-
     df = pd.read_csv(url)
-
-    # rename biar mirip saham
-    df = df.rename(columns={
-        "Symbol": "Symbol",
-        "Name": "Name"
-    })
 
     return df
 
-
-df = load_data()
+df = load_idx_data()
 
 # =========================
 # METRICS
@@ -37,7 +26,7 @@ df = load_data()
 col1, col2 = st.columns(2)
 
 with col1:
-    st.metric("Total Data", len(df))
+    st.metric("Total Emiten", len(df))
 
 with col2:
     st.metric("Last Update", datetime.now().strftime("%H:%M:%S"))
@@ -45,7 +34,7 @@ with col2:
 # =========================
 # TABLE
 # =========================
-st.subheader("📋 Data")
+st.subheader("📋 Daftar Saham Indonesia")
 
 st.dataframe(df, use_container_width=True, height=600)
 
@@ -55,7 +44,7 @@ st.dataframe(df, use_container_width=True, height=600)
 st.download_button(
     "⬇️ Download CSV",
     df.to_csv(index=False),
-    "data.csv",
+    "idx_emiten.csv",
     "text/csv"
 )
 

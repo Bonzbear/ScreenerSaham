@@ -3,10 +3,10 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 
-st.title("📊 Backtest ATR SL (Yahoo Finance)")
+st.title("📊 Backtest ATR SL (Hold 1 Hari)")
 
 # ================================
-# 📥 Input Ticker
+# 📥 Input
 # ================================
 tickers_input = st.text_input(
     "Masukkan ticker (pisahkan koma)",
@@ -24,12 +24,17 @@ atr_mult = st.slider("ATR Multiplier", 1.0, 4.0, 2.0, 0.1)
 use_partial = st.checkbox("Partial Exit (50% SL, 50% Close)", True)
 
 # ================================
-# 📊 Fetch Data
+# 📊 Load Data
 # ================================
 @st.cache_data
 def load_data(tickers, start, end):
-    data = yf.download(tickers, start=start, end=end, group_by='ticker', auto_adjust=False)
-    return data
+    return yf.download(
+        tickers,
+        start=start,
+        end=end,
+        group_by='ticker',
+        auto_adjust=True   # penting → hindari split issue
+    )
 
 if st.button("Run Backtest"):
 
@@ -68,54 +73,64 @@ if st.button("Run Backtest"):
         df['atr'] = df['tr'].rolling(atr_period).mean()
 
         # ================================
-        # Entry Rule (GANTI SESUAI KAMU)
+        # ENTRY RULE (GANTI SESUAI KAMU)
         # ================================
         df['entry_signal'] = df['close'] > df['high'].rolling(20).max().shift(1)
 
         # ================================
-        # Simulation
+        # BACKTEST (HOLD 1 HARI)
         # ================================
-        for idx in df[df['entry_signal']].index:
+        for i in range(len(df) - 1):  # -1 karena butuh hari berikutnya
 
-            entry_price = df.loc[idx, 'close']
-            atr = df.loc[idx, 'atr']
+            if not df.loc[i, 'entry_signal']:
+                continue
+
+            entry_price = df.loc[i, 'close']
+            atr = df.loc[i, 'atr']
 
             if pd.isna(atr):
                 continue
 
             sl = entry_price - (atr * atr_mult)
 
-            for i in range(idx + 1, len(df)):
-                o = df.loc[i, 'open']
-                l = df.loc[i, 'low']
-                c = df.loc[i, 'close']
+            # data hari berikutnya
+            next_row = df.loc[i + 1]
 
-                # GAP DOWN
-                if o <= sl:
-                    exit_price = o
-                    reason = 'gap_SL'
-                    break
+            o = next_row['open']
+            l = next_row['low']
+            c = next_row['close']
 
-                # SL HIT
-                if l <= sl:
-                    if use_partial:
-                        exit_price = (0.5 * sl) + (0.5 * c)
-                        reason = 'partial_SL'
-                    else:
-                        exit_price = sl
-                        reason = 'SL'
-                    break
+            # ========================
+            # EXIT LOGIC
+            # ========================
+
+            # GAP DOWN
+            if o <= sl:
+                exit_price = o
+                reason = 'gap_SL'
+
+            # SL kena intraday
+            elif l <= sl:
+                if use_partial:
+                    exit_price = (0.5 * sl) + (0.5 * c)
+                    reason = 'partial_SL'
+                else:
+                    exit_price = sl
+                    reason = 'SL'
+
+            # normal exit (close T+1)
             else:
-                exit_price = df.iloc[-1]['close']
-                reason = 'EOD'
+                exit_price = c
+                reason = 'close_exit'
 
             ret = (exit_price - entry_price) / entry_price
 
             all_results.append({
                 'ticker': ticker,
-                'entry_date': df.loc[idx, 'date'],
-                'exit_price': exit_price,
+                'entry_date': df.loc[i, 'date'],
+                'exit_date': next_row['date'],
                 'entry_price': entry_price,
+                'exit_price': exit_price,
                 'return': ret,
                 'reason': reason
             })
@@ -123,7 +138,7 @@ if st.button("Run Backtest"):
     results_df = pd.DataFrame(all_results)
 
 # ================================
-# 📊 Metrics
+# 📊 METRICS
 # ================================
     if len(results_df) > 0:
 

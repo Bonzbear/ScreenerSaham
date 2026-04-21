@@ -210,11 +210,11 @@ def is_signal(df):
     prev = df.iloc[-2]
 
     if not (
-       # today["Volume"] > prev["Volume"] and
-        prev["Close"] < today["Close"]
-       # today["Close"] > today["SMA5"] and
-      #  today["Value"] > 10_000_000_000 and
-       # today["ValueRatio"] > 2
+        today["Volume"] > prev["Volume"] and
+        prev["Close"] < today["Close"] and
+        today["Close"] > today["SMA5"] and
+        today["Value"] > 10_000_000_000 and
+        today["ValueRatio"] > 2
     ):
         return False
 

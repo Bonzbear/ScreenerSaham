@@ -253,7 +253,6 @@ def run_screener(data):
             continue
 
         total += 1
-
         # ================= DEBUG =================
         today = df.iloc[-1]
         prev = df.iloc[-2]
@@ -272,6 +271,8 @@ def run_screener(data):
             # tampilkan hanya beberapa saja biar tidak spam
             if total < 10:
                 st.write(debug_info)
+                st.write("Ticker:", ticker)
+                st.write(df.tail(3))
             continue
 
         passed += 1

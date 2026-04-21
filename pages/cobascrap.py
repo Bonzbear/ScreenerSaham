@@ -239,8 +239,11 @@ def is_signal(df):
 # SCREENER
 # =========================
 def run_screener(data):
-    
+
     results = []
+
+    total = 0
+    passed = 0
 
     for ticker, df in data.items():
 
@@ -249,8 +252,29 @@ def run_screener(data):
         if len(df) < 30:
             continue
 
+        total += 1
+
+        # ================= DEBUG =================
+        today = df.iloc[-1]
+        prev = df.iloc[-2]
+
+        debug_info = {
+            "ticker": ticker,
+            "vol>prev": today["Volume"] > prev["Volume"],
+            "close>prev": prev["Close"] < today["Close"],
+            "close>sma5": today["Close"] > today["SMA5"],
+            "value>10B": today["Value"] > 10_000_000_000,
+            "value_ratio>2": today["ValueRatio"] > 2
+        }
+        # =========================================
+
         if not is_signal(df):
+            # tampilkan hanya beberapa saja biar tidak spam
+            if total < 10:
+                st.write(debug_info)
             continue
+
+        passed += 1
 
         score, warning = calculate_score(df)
 
@@ -260,6 +284,10 @@ def run_screener(data):
             "Score": score,
             "Warning": warning
         })
+
+    # tampilkan summary
+    st.write(f"Total dicek: {total}")
+    st.write(f"Lolos: {passed}")
 
     df = pd.DataFrame(results)
 

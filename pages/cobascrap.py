@@ -44,7 +44,13 @@ def format_telegram(df):
 # LOAD CSV (DATA HARI INI)
 # =========================
 def load_csv_today(file):
-    df = pd.read_csv(file)
+    try:
+        df = pd.read_csv(file, encoding="utf-8")
+    except UnicodeDecodeError:
+        try:
+            df = pd.read_csv(file, encoding="utf-16")
+        except UnicodeDecodeError:
+            df = pd.read_csv(file, encoding="latin-1")
 
     df = df[df["Code"] != "Code"]
 

@@ -239,26 +239,8 @@ def run_screener(data):
             continue
 
         total += 1
-        # ================= DEBUG =================
-        today = df.iloc[-1]
-        prev = df.iloc[-2]
-
-        debug_info = {
-            "ticker": ticker,
-            "vol>prev": today["Volume"] > prev["Volume"],
-            "close>prev": prev["Close"] < today["Close"],
-            "close>sma5": today["Close"] > today["SMA5"],
-            "value>10B": today["Value"] > 10_000_000_000,
-            "value_ratio>2": today["ValueRatio"] > 2
-        }
-        # =========================================
 
         if not is_signal(df):
-            # tampilkan hanya beberapa saja biar tidak spam
-            if total < 20:
-                st.write(debug_info)
-                st.write("Ticker:", ticker)
-                st.write(df.tail(3))
             continue
 
         passed += 1
@@ -271,10 +253,6 @@ def run_screener(data):
             "Score": score,
             "Warning": warning
         })
-
-    # tampilkan summary
-    st.write(f"Total dicek: {total}")
-    st.write(f"Lolos: {passed}")
 
     df = pd.DataFrame(results)
 

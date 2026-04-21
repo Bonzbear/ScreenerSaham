@@ -30,16 +30,29 @@ def format_telegram(df):
     msg += "━━━━━━━━━━━━━━\n"
 
     for _, row in df.head(5).iterrows():
-        warning = row["Warning"]
 
-        ticker = row["Ticker"].replace(".JK", "")
+        warning = row["Warning"] if "Warning" in df.columns else ""
+
         if warning:
-            ticker += f" {warning}"
+            ticker = f"{row['Ticker'].replace('.JK','')} {warning}"
+        else:
+            ticker = row["Ticker"].replace(".JK", "")
 
         no += 1
         msg += f"<b>{no}. {ticker}</b>\n"
 
-    msg += "\n<b>⚠️ High Risk</b>\n"
+    msg += (
+        "\n<b>⚠️ Menandakan saham dengan risiko tinggi / volatilitas tinggi</b>\n"
+        "\n<b>📌 Entry</b>\n"
+        "Pre-closing (bid 3-5 tick di atas IEP)\n\n"
+        "<b>🎯 Target</b>\n"
+        "TP fleksibel (bisa >1.5% / ARA)\n\n"
+        "<b>🛑 Risiko</b>\n"
+        "CL jika bertahan di bawah support hingga penutupan\n\n"
+        "<b>ℹ️ Disclaimer</b>\n"
+        "Bukan rekomendasi investasi. Lakukan analisa mandiri.\n"
+    )
+
     return msg
 
 

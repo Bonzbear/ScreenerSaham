@@ -45,33 +45,24 @@ def format_telegram(df):
 # =========================
 def load_csv_today(file):
 
-    # reset pointer (PENTING!)
     file.seek(0)
 
+    # baca fleksibel
     try:
-        df = pd.read_csv(file, encoding="utf-8", sep=",")
+        df = pd.read_csv(file, encoding="utf-8")
     except:
         file.seek(0)
-        try:
-            df = pd.read_csv(file, encoding="latin-1", sep=",")
-        except:
-            file.seek(0)
-            try:
-                df = pd.read_csv(file, encoding="utf-16", sep="\t")
-            except:
-                file.seek(0)
-                df = pd.read_csv(file, encoding="latin-1", sep=";")
+        df = pd.read_csv(file, encoding="latin-1")
 
-    # validasi kosong
-    if df.empty:
-        st.error("CSV kosong atau format tidak dikenali")
-        st.stop()
+    # bersihkan header duplikat
+    df = df[df.iloc[:,1] != "Code"]
 
-    # debug awal (optional)
+    # DEBUG (aktifkan kalau mau lihat struktur)
+    # st.write(df.columns)
     # st.write(df.head())
 
-    # hapus header duplikat
-    df = df[df["Code"] != "Code"]
+    # rename kolom berdasarkan posisi (lebih aman)
+    df = df.iloc[:, :13]  # ambil maksimal 13 kolom pertama
 
     df.columns = [
         "NO","Code","Last","Symbol","Change","Change_pct",

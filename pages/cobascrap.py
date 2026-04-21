@@ -40,6 +40,10 @@ def format_telegram(df):
     msg += "\n<b>⚠️ High Risk</b>\n"
     return msg
 
+def is_market_open():
+    now = datetime.datetime.now(pytz.timezone("Asia/Jakarta"))
+    return now.hour >= 9 and now.hour <= 16
+
 # =========================
 # LOAD CSV (DATA HARI INI)
 # =========================
@@ -104,7 +108,14 @@ def get_data(tickers):
 def merge_today(data, df_today):
 
     combined = {}
-    today_date = pd.Timestamp.today().normalize()
+    hist_last_date = hist["Date"].max()
+
+    if is_market_open():
+    # pakai CSV sebagai hari baru
+        today_date = hist_last_date + pd.Timedelta(days=1)
+    else:
+    # overwrite hari terakhir (bukan tambah baris baru)
+        today_date = hist_last_date
 
     for ticker in df_today["Ticker"].unique():
 
@@ -127,7 +138,12 @@ def merge_today(data, df_today):
             "Volume": row["Volume"]
         }
 
-        hist = pd.concat([hist, pd.DataFrame([new_row])], ignore_index=True)
+        if today_date == hist_last_date:
+    # overwrite bar terakhir (karena masih hari yang sama)
+            hist.iloc[-1] = [today_date, row["Open"], row["High"], row["Low"], row["Close"], row["Volume"]]
+        else:
+    # tambah bar baru
+            hist = pd.concat([hist, pd.DataFrame([new_row])], ignore_index=True)
         hist.set_index("Date", inplace=True)
 
         combined[ticker] = hist

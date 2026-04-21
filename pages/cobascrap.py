@@ -213,8 +213,8 @@ def is_signal(df):
         today["Volume"] > prev["Volume"] and
         prev["Close"] < today["Close"] and
         today["Close"] > today["SMA5"] and
-        today["Value"] > 10_000_000_000 and
-        today["ValueRatio"] > 2
+        today["Value"] > 10_000_000_000
+        #today["ValueRatio"] > 2
     ):
         return False
 

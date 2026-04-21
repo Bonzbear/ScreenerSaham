@@ -260,7 +260,10 @@ if st.button("▶️ Run Screener"):
         data = get_data(tickers)
 
         data = merge_today(data, df_today)
-
+        for ticker, df in data.items():
+            st.write(ticker)
+            st.write(df.tail(3))
+            break
         df = run_screener(data)
 
     if df.empty:

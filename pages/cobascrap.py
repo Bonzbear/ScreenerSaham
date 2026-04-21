@@ -260,10 +260,10 @@ def run_screener(data):
 
         debug_info = {
             "ticker": ticker,
-            "vol>prev": today["Volume"] > prev["Volume"],
+            "vol>prev": today["Volume"] < prev["Volume"],
             "close>prev": prev["Close"] < today["Close"],
             "close>sma5": today["Close"] > today["SMA5"],
-            "value>10B": today["Value"] > 10_000_000_000,
+            "value>10B": today["Value"] < 10_000_000_000,
             "value_ratio>2": today["ValueRatio"] > 2
         }
         # =========================================

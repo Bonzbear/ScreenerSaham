@@ -86,7 +86,8 @@ def load_csv_today(file):
 
     df["Ticker"] = df["Code"] + ".JK"
     df["Close"] = df["Last"]
-
+    df["Volume"] = df["Volume"] * 100
+    
     return df[["Ticker","Open","High","Low","Close","Volume"]]
 # =========================
 # YAHOO DATA
@@ -95,7 +96,7 @@ def load_csv_today(file):
 def get_data(tickers):
     return yf.download(
         tickers=" ".join(tickers),
-        period="1y",
+        period="2y",
         group_by="ticker",
         progress=False
     )

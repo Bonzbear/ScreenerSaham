@@ -40,9 +40,7 @@ def format_telegram(df):
     msg += "\n<b>⚠️ High Risk</b>\n"
     return msg
 
-def is_market_open():
-    now = datetime.datetime.now(pytz.timezone("Asia/Jakarta"))
-    return now.hour >= 9 and now.hour <= 16
+
 
 # =========================
 # LOAD CSV (DATA HARI INI)
@@ -106,34 +104,31 @@ def get_data(tickers):
 # MERGE CSV + YAHOO
 # =========================
 def merge_today(data, df_today):
-
     combined = {}
-
+    
+    # Ambil tanggal sistem hari ini (tanpa jam)
     indonesia_tz = pytz.timezone("Asia/Jakarta")
-    now = datetime.datetime.now(indonesia_tz)
-
-    def is_market_open():
-        return 9 <= now.hour <= 16
+    today_date = pd.Timestamp(datetime.datetime.now(indonesia_tz).date())
 
     for ticker in df_today["Ticker"].unique():
-
         if ticker not in data:
             continue
 
         hist = data[ticker].copy()
-
         if hist.empty:
             continue
 
-        hist = hist.reset_index()
-
-        # 👉 AMBIL SETELAH hist ADA
-        hist_last_date = hist["Date"].max()
-
+        # Pastikan index adalah datetime agar bisa dibandingkan
+        hist.index = pd.to_datetime(hist.index)
+        
+        # Ambil data hari ini dari df_today
         row = df_today[df_today["Ticker"] == ticker].iloc[0]
+        
+        # Ambil tanggal terakhir yang ada di file history
+        last_date_in_hist = hist.index.max()
 
-        new_row = {
-            "Date": hist_last_date + pd.Timedelta(days=1),
+        # Data yang akan dimasukkan
+        new_values = {
             "Open": row["Open"],
             "High": row["High"],
             "Low": row["Low"],
@@ -141,29 +136,19 @@ def merge_today(data, df_today):
             "Volume": row["Volume"]
         }
 
-        # =========================
-        # LOGIC PAGI vs SORE
-        # =========================
-        if is_market_open():
-            # anggap hari baru
-            hist = hist[hist["Date"] < new_row["Date"]]
-            hist = pd.concat([hist, pd.DataFrame([new_row])], ignore_index=True)
+        if last_date_in_hist == today_date:
+            # Jika baris terakhir sudah tanggal hari ini, TIMPA (Update)
+            hist.loc[last_date_in_hist, ["Open", "High", "Low", "Close", "Volume"]] = \
+                [row["Open"], row["High"], row["Low"], row["Close"], row["Volume"]]
         else:
-            # overwrite bar terakhir
-            hist.iloc[-1] = [
-                hist_last_date,
-                row["Open"],
-                row["High"],
-                row["Low"],
-                row["Close"],
-                row["Volume"]
-            ]
-
-        hist.set_index("Date", inplace=True)
+            # Jika belum ada tanggal hari ini, TAMBAH (Append)
+            new_row = pd.DataFrame([new_values], index=[today_date])
+            hist = pd.concat([hist, new_row])
 
         combined[ticker] = hist
 
     return combined
+
 
 # =========================
 # PREPARE DATA

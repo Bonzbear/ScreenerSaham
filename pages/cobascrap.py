@@ -212,8 +212,8 @@ def is_signal(df):
     if not (
         today["Volume"] > prev["Volume"] and
         prev["Close"] < today["Close"] and
-        today["Close"] > today["SMA5"]
-        #today["Value"] > 10_000_000_000
+        today["Close"] > today["SMA5"] and
+        today["Value"] > 5_000_000_000
         #today["ValueRatio"] > 2
     ):
         return False
@@ -254,7 +254,7 @@ def run_screener(data):
 
         if not is_signal(df):
             # tampilkan hanya beberapa saja biar tidak spam
-            if total < 300:
+            if total < 20:
                 st.write(debug_info)
                 st.write("Ticker:", ticker)
                 st.write(df.tail(3))

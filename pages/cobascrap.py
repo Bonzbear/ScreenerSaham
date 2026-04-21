@@ -108,14 +108,12 @@ def get_data(tickers):
 def merge_today(data, df_today):
 
     combined = {}
-    hist_last_date = hist["Date"].max()
 
-    if is_market_open():
-    # pakai CSV sebagai hari baru
-        today_date = hist_last_date + pd.Timedelta(days=1)
-    else:
-    # overwrite hari terakhir (bukan tambah baris baru)
-        today_date = hist_last_date
+    indonesia_tz = pytz.timezone("Asia/Jakarta")
+    now = datetime.datetime.now(indonesia_tz)
+
+    def is_market_open():
+        return 9 <= now.hour <= 16
 
     for ticker in df_today["Ticker"].unique():
 
@@ -123,14 +121,19 @@ def merge_today(data, df_today):
             continue
 
         hist = data[ticker].copy()
-        hist.reset_index(inplace=True)
 
-        hist = hist[hist["Date"] < today_date]
+        if hist.empty:
+            continue
+
+        hist = hist.reset_index()
+
+        # 👉 AMBIL SETELAH hist ADA
+        hist_last_date = hist["Date"].max()
 
         row = df_today[df_today["Ticker"] == ticker].iloc[0]
 
         new_row = {
-            "Date": today_date,
+            "Date": hist_last_date + pd.Timedelta(days=1),
             "Open": row["Open"],
             "High": row["High"],
             "Low": row["Low"],
@@ -138,12 +141,24 @@ def merge_today(data, df_today):
             "Volume": row["Volume"]
         }
 
-        if today_date == hist_last_date:
-    # overwrite bar terakhir (karena masih hari yang sama)
-            hist.iloc[-1] = [today_date, row["Open"], row["High"], row["Low"], row["Close"], row["Volume"]]
-        else:
-    # tambah bar baru
+        # =========================
+        # LOGIC PAGI vs SORE
+        # =========================
+        if is_market_open():
+            # anggap hari baru
+            hist = hist[hist["Date"] < new_row["Date"]]
             hist = pd.concat([hist, pd.DataFrame([new_row])], ignore_index=True)
+        else:
+            # overwrite bar terakhir
+            hist.iloc[-1] = [
+                hist_last_date,
+                row["Open"],
+                row["High"],
+                row["Low"],
+                row["Close"],
+                row["Volume"]
+            ]
+
         hist.set_index("Date", inplace=True)
 
         combined[ticker] = hist

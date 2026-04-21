@@ -44,14 +44,33 @@ def format_telegram(df):
 # LOAD CSV (DATA HARI INI)
 # =========================
 def load_csv_today(file):
-    try:
-        df = pd.read_csv(file, encoding="utf-8")
-    except UnicodeDecodeError:
-        try:
-            df = pd.read_csv(file, encoding="utf-16")
-        except UnicodeDecodeError:
-            df = pd.read_csv(file, encoding="latin-1")
 
+    # reset pointer (PENTING!)
+    file.seek(0)
+
+    try:
+        df = pd.read_csv(file, encoding="utf-8", sep=",")
+    except:
+        file.seek(0)
+        try:
+            df = pd.read_csv(file, encoding="latin-1", sep=",")
+        except:
+            file.seek(0)
+            try:
+                df = pd.read_csv(file, encoding="utf-16", sep="\t")
+            except:
+                file.seek(0)
+                df = pd.read_csv(file, encoding="latin-1", sep=";")
+
+    # validasi kosong
+    if df.empty:
+        st.error("CSV kosong atau format tidak dikenali")
+        st.stop()
+
+    # debug awal (optional)
+    # st.write(df.head())
+
+    # hapus header duplikat
     df = df[df["Code"] != "Code"]
 
     df.columns = [
@@ -59,6 +78,7 @@ def load_csv_today(file):
         "Prev","Open","High","Low","Value_M","Volume","Freq"
     ]
 
+    # cleaning angka
     num_cols = ["Last","Prev","Open","High","Low","Value_M","Volume"]
 
     for col in num_cols:
@@ -75,7 +95,6 @@ def load_csv_today(file):
     df["Close"] = df["Last"]
 
     return df[["Ticker","Open","High","Low","Close","Volume"]]
-
 # =========================
 # YAHOO DATA
 # =========================

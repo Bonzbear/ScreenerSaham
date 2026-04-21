@@ -254,7 +254,7 @@ def run_screener(data):
 
         if not is_signal(df):
             # tampilkan hanya beberapa saja biar tidak spam
-            if total < 10:
+            if total < 300:
                 st.write(debug_info)
                 st.write("Ticker:", ticker)
                 st.write(df.tail(3))

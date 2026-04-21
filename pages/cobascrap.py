@@ -225,10 +225,10 @@ def is_signal(df):
     prev = df.iloc[-2]
 
     if not (
-        today["Volume"] < prev["Volume"] and
+        today["Volume"] > prev["Volume"] and
         prev["Close"] < today["Close"] and
         today["Close"] > today["SMA5"] and
-        today["Value"] < 10_000_000_000 and
+        today["Value"] > 10_000_000_000 and
         today["ValueRatio"] > 2
     ):
         return False
@@ -260,10 +260,10 @@ def run_screener(data):
 
         debug_info = {
             "ticker": ticker,
-            "vol>prev": today["Volume"] < prev["Volume"],
+            "vol>prev": today["Volume"] > prev["Volume"],
             "close>prev": prev["Close"] < today["Close"],
             "close>sma5": today["Close"] > today["SMA5"],
-            "value>10B": today["Value"] < 10_000_000_000,
+            "value>10B": today["Value"] > 10_000_000_000,
             "value_ratio>2": today["ValueRatio"] > 2
         }
         # =========================================

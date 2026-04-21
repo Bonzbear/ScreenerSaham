@@ -8,6 +8,8 @@ import pytz
 TOKEN = ""
 CHAT_ID = ""
 
+MAX_SCORE = 1000
+
 # =========================
 # TELEGRAM
 # =========================
@@ -28,7 +30,7 @@ def format_telegram(df):
     msg += "━━━━━━━━━━━━━━\n"
 
     for _, row in df.head(5).iterrows():
-        warning = row["Warning"] if "Warning" in df.columns else ""
+        warning = row["Warning"]
 
         ticker = row["Ticker"].replace(".JK", "")
         if warning:
@@ -41,37 +43,28 @@ def format_telegram(df):
     return msg
 
 
-
 # =========================
-# LOAD CSV (DATA HARI INI)
+# LOAD CSV
 # =========================
 def load_csv_today(file):
 
     file.seek(0)
 
-    # baca fleksibel
     try:
         df = pd.read_csv(file, encoding="utf-8")
     except:
         file.seek(0)
         df = pd.read_csv(file, encoding="latin-1")
 
-    # bersihkan header duplikat
     df = df[df.iloc[:,1] != "Code"]
 
-    # DEBUG (aktifkan kalau mau lihat struktur)
-    # st.write(df.columns)
-    # st.write(df.head())
-
-    # rename kolom berdasarkan posisi (lebih aman)
-    df = df.iloc[:, :13]  # ambil maksimal 13 kolom pertama
+    df = df.iloc[:, :13]
 
     df.columns = [
         "NO","Code","Last","Symbol","Change","Change_pct",
         "Prev","Open","High","Low","Value_M","Volume","Freq"
     ]
 
-    # cleaning angka
     num_cols = ["Last","Prev","Open","High","Low","Value_M","Volume"]
 
     for col in num_cols:
@@ -84,51 +77,53 @@ def load_csv_today(file):
         )
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
+    # 🔥 FIX LOT → SHARES
+    df["Volume"] = df["Volume"] * 100
+
     df["Ticker"] = df["Code"] + ".JK"
     df["Close"] = df["Last"]
-    df["Volume"] = df["Volume"] * 100
-    
+
     return df[["Ticker","Open","High","Low","Close","Volume"]]
+
+
 # =========================
-# YAHOO DATA
+# YAHOO
 # =========================
 @st.cache_data(ttl=600)
 def get_data(tickers):
     return yf.download(
         tickers=" ".join(tickers),
-        period="2y",
+        period="5y",
         group_by="ticker",
         progress=False
     )
 
+
 # =========================
-# MERGE CSV + YAHOO
+# MERGE
 # =========================
 def merge_today(data, df_today):
+
     combined = {}
-    
-    # Ambil tanggal sistem hari ini (tanpa jam)
     indonesia_tz = pytz.timezone("Asia/Jakarta")
     today_date = pd.Timestamp(datetime.datetime.now(indonesia_tz).date())
 
     for ticker in df_today["Ticker"].unique():
+
         if ticker not in data:
             continue
 
         hist = data[ticker].copy()
+
         if hist.empty:
             continue
 
-        # Pastikan index adalah datetime agar bisa dibandingkan
         hist.index = pd.to_datetime(hist.index)
-        
-        # Ambil data hari ini dari df_today
-        row = df_today[df_today["Ticker"] == ticker].iloc[0]
-        
-        # Ambil tanggal terakhir yang ada di file history
-        last_date_in_hist = hist.index.max()
 
-        # Data yang akan dimasukkan
+        row = df_today[df_today["Ticker"] == ticker].iloc[0]
+
+        last_date = hist.index.max()
+
         new_values = {
             "Open": row["Open"],
             "High": row["High"],
@@ -137,12 +132,9 @@ def merge_today(data, df_today):
             "Volume": row["Volume"]
         }
 
-        if last_date_in_hist == today_date:
-            # Jika baris terakhir sudah tanggal hari ini, TIMPA (Update)
-            hist.loc[last_date_in_hist, ["Open", "High", "Low", "Close", "Volume"]] = \
-                [row["Open"], row["High"], row["Low"], row["Close"], row["Volume"]]
+        if last_date == today_date:
+            hist.loc[last_date, ["Open","High","Low","Close","Volume"]] = list(new_values.values())
         else:
-            # Jika belum ada tanggal hari ini, TAMBAH (Append)
             new_row = pd.DataFrame([new_values], index=[today_date])
             hist = pd.concat([hist, new_row])
 
@@ -152,9 +144,10 @@ def merge_today(data, df_today):
 
 
 # =========================
-# PREPARE DATA
+# PREPARE
 # =========================
 def prepare_data(df):
+
     df["SMA5"] = df["Close"].rolling(5).mean()
     df["VOLMA20"] = df["Volume"].rolling(20).mean()
     df["VOLMA5"] = df["Volume"].rolling(5).mean()
@@ -168,6 +161,66 @@ def prepare_data(df):
     ).cumsum() / df["Volume"].cumsum()
 
     return df.dropna()
+
+
+# =========================
+# ARA
+# =========================
+def get_ara_limit(price):
+
+    if price < 200:
+        return 0.35
+    elif price <= 5000:
+        return 0.25
+    else:
+        return 0.20
+
+
+# =========================
+# SIGNAL
+# =========================
+def is_signal(df, i):
+
+    today = df.iloc[i]
+    prev = df.iloc[i-1]
+
+    close = today["Close"]
+    volume = today["Volume"]
+
+    prev_close = prev["Close"]
+    prev_volume = prev["Volume"]
+
+    sma5 = today["SMA5"]
+    value = today["Value"]
+    avg_value = today["AvgValue20"]
+    value_ratio = today["ValueRatio"]
+    avg_volume = today["VOLMA20"]
+
+    change_pct = (close - prev_close) / prev_close
+    ara = get_ara_limit(prev_close)
+
+    if close > 9700 or close < 50:
+        return False
+
+    if ara == 0.25 and change_pct >= 0.24:
+        return False
+    if ara == 0.35 and change_pct >= 0.34:
+        return False
+
+    if not (avg_value > 10_000_000_000 and avg_volume > 1_000_000):
+        return False
+
+    if not (
+        volume > prev_volume and
+        prev_close < close and
+        close > sma5 and
+        value > 10_000_000_000 and
+        value_ratio > 2
+    ):
+        return False
+
+    return True
+
 
 # =========================
 # SCORE
@@ -203,23 +256,37 @@ def calculate_score(df):
 
     return score, warning
 
-# =========================
-# SIGNAL
-# =========================
-def is_signal(df):
-    today = df.iloc[-1]
-    prev = df.iloc[-2]
 
-    if not (
-        today["Volume"] > prev["Volume"] and
-        prev["Close"] < today["Close"] and
-        today["Close"] > today["SMA5"] and
-        today["Value"] > 10_000_000_000
-        #today["ValueRatio"] > 2
-    ):
-        return False
+# =========================
+# BACKTEST + EV
+# =========================
+def backtest_ev(df):
 
-    return True
+    returns = []
+
+    for i in range(20, len(df)-1):
+
+        if not is_signal(df, i):
+            continue
+
+        today = df.iloc[i]
+        next_day = df.iloc[i+1]
+
+        close_today = today["Close"]
+        high_next = next_day["High"]
+
+        ret = (high_next - close_today) / close_today
+
+        returns.append(ret)
+
+    if len(returns) == 0:
+        return 0, 0
+
+    winrate = sum(1 for r in returns if r >= 0.015) / len(returns)
+    ev = sum(returns) / len(returns)
+
+    return round(winrate * 100, 2), round(ev * 100, 2)
+
 
 # =========================
 # SCREENER
@@ -228,9 +295,6 @@ def run_screener(data):
 
     results = []
 
-    total = 0
-    passed = 0
-
     for ticker, df in data.items():
 
         df = prepare_data(df)
@@ -238,28 +302,34 @@ def run_screener(data):
         if len(df) < 30:
             continue
 
-        total += 1
-
-        if not is_signal(df):
+        if not is_signal(df, len(df)-1):
             continue
 
-        passed += 1
-
         score, warning = calculate_score(df)
+        score_pct = (score / MAX_SCORE) * 100
+
+        winrate, ev = backtest_ev(df)
+
+        probability = (score_pct * 0.3) + (winrate * 0.7)
 
         results.append({
             "Ticker": ticker,
             "Price": df["Close"].iloc[-1],
-            "Score": score,
-            "Warning": warning
+            "Warning": warning,
+            "Score (%)": round(score_pct,2),
+            "Winrate (%)": winrate,
+            "Probability (%)": round(probability,2),
+            "EV (%)": ev
         })
 
     df = pd.DataFrame(results)
 
     if not df.empty:
-        df = df.sort_values(by="Score", ascending=False)
+        df = df.sort_values(by="Probability (%)", ascending=False)
+        df.insert(0,"Rank",range(1,len(df)+1))
 
     return df
+
 
 # =========================
 # UI
@@ -278,17 +348,24 @@ if st.button("▶️ Run Screener"):
     with st.spinner("Processing..."):
 
         df_today = load_csv_today(uploaded_file)
-
         tickers = df_today["Ticker"].unique().tolist()
 
         data = get_data(tickers)
-
         data = merge_today(data, df_today)
-       
+
         df = run_screener(data)
 
     if df.empty:
         st.warning("Tidak ada saham")
     else:
+        st.session_state["df"] = df
         st.success(f"{len(df)} saham ditemukan")
         st.dataframe(df, use_container_width=True)
+
+
+if "df" in st.session_state:
+
+    if st.button("📤 Telegram"):
+        msg = format_telegram(st.session_state["df"])
+        send_telegram(msg)
+        st.success("Terkirim")

@@ -430,7 +430,7 @@ if st.button("▶️ Run Screener"):
 
         data = get_data(tickers)
         data = merge_today(data, df_today)
-
+        st.session_state["data"] = data
         df = run_screener(data)
 
     if df.empty:

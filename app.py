@@ -219,7 +219,7 @@ def is_signal(df, i):
 
     if ara == 0.25 and change_pct >= 0.24:
         return False
-    if ara == 0.35 and change_pct >= 0.34:
+    if ara == 0.35 and change_pct >= 0.33:
         return False
 
     if not (avg_value > 10_000_000_000 and avg_volume > 1_000_000):

@@ -212,7 +212,7 @@ def is_signal(df, i):
     change_pct = (close - prev_close) / prev_close
     ara = get_ara_limit(prev_close)
 
-    if close > 9700 or close < 50:
+    if close > 6500 or close < 50:
         return False
 
     if ara == 0.25 and change_pct >= 0.24:

@@ -444,47 +444,53 @@ if st.button("▶️ Run Screener"):
 # =========================
 st.subheader("📊 Analisis TP / SL (Data Historis)")
 
-all_stats = []
-all_recommendations = []
+if "data" in st.session_state and "df" in st.session_state:
 
-for ticker, hist_df in data.items():
+    screened_tickers = st.session_state["df"]["Ticker"].tolist()
 
-    hist_df = prepare_data(hist_df)
+    all_recommendations = []
 
-    if len(hist_df) < 30:
-        continue
+    for ticker, hist_df in st.session_state["data"].items():
 
-    stats = analyze_tp_sl(hist_df)
+        if ticker not in screened_tickers:
+            continue
 
-    if stats:
-        rec = recommend_tp_sl(stats)
+        hist_df = prepare_data(hist_df)
 
-        rec["Ticker"] = ticker.replace(".JK","")
-        all_recommendations.append(rec)
+        if len(hist_df) < 30:
+            continue
 
-if all_recommendations:
+        stats = analyze_tp_sl(hist_df)
 
-    df_tp_sl = pd.DataFrame(all_recommendations)
+        if stats:
+            rec = recommend_tp_sl(stats)
+            rec["Ticker"] = ticker.replace(".JK","")
+            all_recommendations.append(rec)
 
-    # ambil rata-rata seluruh saham (global insight)
-    summary = df_tp_sl.mean(numeric_only=True)
+    if all_recommendations:
 
-    st.markdown("### 🎯 Rekomendasi Global (Rata-rata)")
+        df_tp_sl = pd.DataFrame(all_recommendations)
+        summary = df_tp_sl.mean(numeric_only=True)
 
-    st.write({
-        "TP konservatif": round(summary["TP konservatif (%)"], 2),
-        "TP optimal": round(summary["TP optimal (%)"], 2),
-        "TP agresif": round(summary["TP agresif (%)"], 2),
-        "SL aman": round(summary["SL aman (%)"], 2),
-        "SL optimal": round(summary["SL optimal (%)"], 2),
-        "Trailing start": round(summary["Trailing start (%)"], 2),
-    })
+        st.markdown("### 🎯 Rekomendasi Global (Rata-rata)")
 
-    st.markdown("### 📋 Detail per Saham")
-    st.dataframe(df_tp_sl, use_container_width=True)
+        st.write({
+            "TP konservatif": round(summary["TP konservatif (%)"], 2),
+            "TP optimal": round(summary["TP optimal (%)"], 2),
+            "TP agresif": round(summary["TP agresif (%)"], 2),
+            "SL aman": round(summary["SL aman (%)"], 2),
+            "SL optimal": round(summary["SL optimal (%)"], 2),
+            "Trailing start": round(summary["Trailing start (%)"], 2),
+        })
+
+        st.markdown("### 📋 Detail per Saham")
+        st.dataframe(df_tp_sl, use_container_width=True)
+
+    else:
+        st.warning("Tidak cukup data untuk analisis TP/SL")
 
 else:
-    st.warning("Tidak cukup data untuk analisis TP/SL")
+    st.info("Run screener dulu")
 
 if "df" in st.session_state:
 

@@ -397,17 +397,31 @@ def recommend_tp_sl(stats):
     if not stats:
         return None
 
+    tp_con = stats["mfe_median"] * 100
+    tp_opt = stats["mfe_p75"] * 100
+    tp_agg = stats["mfe_p90"] * 100
+
+    sl_safe = abs(stats["mae_median"]) * 100
+    sl_opt = abs(stats["mae_p75"]) * 100
+
+    # === FIX UTAMA ===
+    if sl_safe == 0:
+        sl_safe = tp_con * 0.5
+
+    if sl_opt == 0:
+        sl_opt = tp_opt * 0.5
+
+    # trailing
+    trailing = stats["mfe_median"] * 0.6 * 100
+
     return {
-        "TP konservatif (%)": stats["mfe_median"] * 100,
-        "TP optimal (%)": stats["mfe_p75"] * 100,
-        "TP agresif (%)": stats["mfe_p90"] * 100,
-
-        "SL aman (%)": abs(stats["mae_median"]) * 100,
-        "SL optimal (%)": abs(stats["mae_p75"]) * 100,
-
-        "Trailing start (%)": stats["mfe_median"] * 0.6 * 100
+        "TP konservatif (%)": tp_con,
+        "TP optimal (%)": tp_opt,
+        "TP agresif (%)": tp_agg,
+        "SL aman (%)": sl_safe,
+        "SL optimal (%)": sl_opt,
+        "Trailing start (%)": trailing
     }
-
 
 # =========================
 # UI

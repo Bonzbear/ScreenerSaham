@@ -342,6 +342,69 @@ def run_screener(data):
         df.insert(0,"Rank",range(1,len(df)+1))
 
     return df
+    
+# =========================
+# MFE MAE ANALYSIS (NEW)
+# =========================
+def analyze_tp_sl(df):
+
+    mfes = []
+    maes = []
+
+    for i in range(20, len(df)-1):
+
+        if not is_signal(df, i):
+            continue
+
+        today = df.iloc[i]
+        next_day = df.iloc[i+1]
+
+        entry = today["Close"]
+        high = next_day["High"]
+        low = next_day["Low"]
+
+        mfe = (high - entry) / entry
+        mae = (low - entry) / entry
+
+        mfes.append(mfe)
+        maes.append(mae)
+
+    if len(mfes) == 0:
+        return None
+
+    mfes = np.array(mfes)
+    maes = np.array(maes)
+
+    stats = {
+        "mfe_mean": np.mean(mfes),
+        "mfe_median": np.median(mfes),
+        "mfe_p75": np.percentile(mfes, 75),
+        "mfe_p90": np.percentile(mfes, 90),
+
+        "mae_mean": np.mean(maes),
+        "mae_median": np.median(maes),
+        "mae_p75": np.percentile(maes, 75),
+        "mae_p90": np.percentile(maes, 90),
+    }
+
+    return stats
+
+
+def recommend_tp_sl(stats):
+
+    if not stats:
+        return None
+
+    return {
+        "TP konservatif (%)": stats["mfe_median"] * 100,
+        "TP optimal (%)": stats["mfe_p75"] * 100,
+        "TP agresif (%)": stats["mfe_p90"] * 100,
+
+        "SL aman (%)": abs(stats["mae_median"]) * 100,
+        "SL optimal (%)": abs(stats["mae_p75"]) * 100,
+
+        "Trailing start (%)": stats["mfe_median"] * 0.6 * 100
+    }
 
 
 # =========================
@@ -374,7 +437,52 @@ if st.button("▶️ Run Screener"):
         st.session_state["df"] = df
         st.success(f"{len(df)} saham ditemukan")
         st.dataframe(df, use_container_width=True)
+# =========================
+# TP SL ANALYSIS OUTPUT (NEW)
+# =========================
+st.subheader("📊 Analisis TP / SL (Data Historis)")
 
+all_stats = []
+all_recommendations = []
+
+for ticker, hist_df in data.items():
+
+    hist_df = prepare_data(hist_df)
+
+    if len(hist_df) < 30:
+        continue
+
+    stats = analyze_tp_sl(hist_df)
+
+    if stats:
+        rec = recommend_tp_sl(stats)
+
+        rec["Ticker"] = ticker.replace(".JK","")
+        all_recommendations.append(rec)
+
+if all_recommendations:
+
+    df_tp_sl = pd.DataFrame(all_recommendations)
+
+    # ambil rata-rata seluruh saham (global insight)
+    summary = df_tp_sl.mean(numeric_only=True)
+
+    st.markdown("### 🎯 Rekomendasi Global (Rata-rata)")
+
+    st.write({
+        "TP konservatif": round(summary["TP konservatif (%)"], 2),
+        "TP optimal": round(summary["TP optimal (%)"], 2),
+        "TP agresif": round(summary["TP agresif (%)"], 2),
+        "SL aman": round(summary["SL aman (%)"], 2),
+        "SL optimal": round(summary["SL optimal (%)"], 2),
+        "Trailing start": round(summary["Trailing start (%)"], 2),
+    })
+
+    st.markdown("### 📋 Detail per Saham")
+    st.dataframe(df_tp_sl, use_container_width=True)
+
+else:
+    st.warning("Tidak cukup data untuk analisis TP/SL")
 
 if "df" in st.session_state:
 

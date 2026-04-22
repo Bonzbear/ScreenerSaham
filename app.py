@@ -470,18 +470,29 @@ if "data" in st.session_state and "df" in st.session_state:
     if all_recommendations:
 
         df_tp_sl = pd.DataFrame(all_recommendations)
+        df_tp_sl = pd.DataFrame(all_recommendations)
+
+        # urutkan kolom (ticker di kiri)
+        cols = ["Ticker"] + [c for c in df_tp_sl.columns if c != "Ticker"]
+        df_tp_sl = df_tp_sl[cols]
+
+        # rounding
+        df_tp_sl = df_tp_sl.round(2)
+
+        # optional: batasi TP ekstrim
+        df_tp_sl["TP optimal (%)"] = df_tp_sl["TP optimal (%)"].clip(upper=10)
         summary = df_tp_sl.mean(numeric_only=True)
 
         st.markdown("### 🎯 Rekomendasi Global (Rata-rata)")
 
-        st.write({
-            "TP konservatif": round(summary["TP konservatif (%)"], 2),
-            "TP optimal": round(summary["TP optimal (%)"], 2),
-            "TP agresif": round(summary["TP agresif (%)"], 2),
-            "SL aman": round(summary["SL aman (%)"], 2),
-            "SL optimal": round(summary["SL optimal (%)"], 2),
-            "Trailing start": round(summary["Trailing start (%)"], 2),
-        })
+ #       st.write({
+ #           "TP konservatif": round(summary["TP konservatif (%)"], 2),
+ #           "TP optimal": round(summary["TP optimal (%)"], 2),
+ #           "TP agresif": round(summary["TP agresif (%)"], 2),
+ #           "SL aman": round(summary["SL aman (%)"], 2),
+ #           "SL optimal": round(summary["SL optimal (%)"], 2),
+ #           "Trailing start": round(summary["Trailing start (%)"], 2),
+ #       })
 
         st.markdown("### 📋 Detail per Saham")
         st.dataframe(df_tp_sl, use_container_width=True)

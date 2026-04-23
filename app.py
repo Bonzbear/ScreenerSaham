@@ -509,7 +509,16 @@ if "data" in st.session_state and "df" in st.session_state:
  #       })
 
         st.markdown("### 📋 Detail per Saham")
-        st.dataframe(df_tp_sl, use_container_width=True)
+        df_display = df.copy()
+        df_display["Kirim"] = False
+
+        edited_df = st.data_editor(
+        df_display,
+        use_container_width=True,
+        num_rows="dynamic"
+        )
+
+        st.session_state["edited_df"] = edited_df
 
     else:
         st.warning("Tidak cukup data untuk analisis TP/SL")
@@ -517,9 +526,16 @@ if "data" in st.session_state and "df" in st.session_state:
 else:
     st.info("Run screener dulu")
 
-if "df" in st.session_state:
+if "edited_df" in st.session_state:
 
     if st.button("📤 Telegram"):
-        msg = format_telegram(st.session_state["df"])
-        send_telegram(msg)
-        st.success("Terkirim")
+
+        selected = st.session_state["edited_df"]
+        selected = selected[selected["Kirim"] == True]
+
+        if selected.empty:
+            st.warning("Pilih saham dulu")
+        else:
+            msg = format_telegram(selected)
+            send_telegram(msg)
+            st.success("Terkirim")

@@ -47,7 +47,7 @@ def format_telegram(df):
         "\n<b>📌 Entry</b>\n"
         "Pre-closing (bid 3-5 tick di atas IEP)\n\n"
         "<b>🎯 Target</b>\n"
-        "TP fleksibel (bisa >1.5% / ARA)\n\n"
+        "TP fleksibel (bisa >1%)\nSaya pribadi ambil TP 1 di +1%\n\n"
         "<b>🛑 Risiko</b>\n"
         "CL jika bertahan di bawah support hingga penutupan\n\n"
         "<b>ℹ️ Disclaimer</b>\n"

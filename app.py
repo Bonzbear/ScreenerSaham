@@ -337,10 +337,10 @@ def run_screener(data):
 
         probability = (score_pct * 0.3) + (winrate * 0.7)
 
-        st.write(data["INDS.JK"].tail(3))     
+    
         results.append({
             "Ticker": ticker,
-            "Price": df["Close"].iloc[-1],
+            "Price": df["Close"].iloc[0],
             "Warning": warning,
             "Score (%)": round(score_pct,2),
             "Winrate (%)": winrate,

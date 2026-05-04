@@ -61,7 +61,7 @@ def format_telegram(df):
 
 
 # =========================
-# LOAD CSV
+# LOAD CSV (HARI INI)
 # =========================
 def load_csv_today(file):
 
@@ -93,11 +93,13 @@ def load_csv_today(file):
         )
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # ⚠️ SESUAIKAN JIKA PERLU (lot vs share)
+    # ✔️ volume sudah disesuaikan
     df["Volume"] = df["Volume"] * 100
 
     df["Ticker"] = df["Code"] + ".JK"
     df["Close"] = df["Last"]
+
+    # ✔️ pakai value asli dari CSV
     df["Value"] = df["Value_M"] * 1_000_000
 
     return df[["Ticker","Open","High","Low","Close","Volume","Value"]]
@@ -133,8 +135,10 @@ def get_data(tickers):
 
         df.index = pd.to_datetime(df.index).tz_localize(None).normalize()
 
-        # 🔑 ambil hanya sampai H-1
+        # 🔥 hanya ambil sampai H-1
         df = df[df.index < today]
+
+        df = df.sort_index()
 
         clean_data[ticker] = df
 
@@ -187,8 +191,6 @@ def merge_today(data, df_today):
 def prepare_data(df):
 
     df = df.copy()
-
-    # 🔧 penting untuk urutan & konsistensi
     df = df.sort_index()
     df = df[~df.index.duplicated(keep='last')]
 
@@ -220,7 +222,7 @@ def get_ara_limit(price):
 
 
 # =========================
-# SIGNAL (TIDAK DIUBAH)
+# SIGNAL (UNCHANGED)
 # =========================
 def is_signal(df, i):
 
@@ -257,8 +259,8 @@ def is_signal(df, i):
         volume > prev_volume and
         prev_close < close and
         close > sma5 and
-        value > 10_000_000_000
-        #value_ratio > 2
+        value > 10_000_000_000 and
+        value_ratio > 2
     ):
         return False
 
@@ -266,7 +268,7 @@ def is_signal(df, i):
 
 
 # =========================
-# SCORE (TIDAK DIUBAH)
+# SCORE
 # =========================
 def calculate_score(df):
 
@@ -301,7 +303,7 @@ def calculate_score(df):
 
 
 # =========================
-# BACKTEST (TIDAK DIUBAH)
+# BACKTEST
 # =========================
 def backtest_ev(df):
 
@@ -332,7 +334,7 @@ def backtest_ev(df):
 
 
 # =========================
-# SCREENER (TIDAK DIUBAH)
+# SCREENER
 # =========================
 def run_screener(data):
 
@@ -396,7 +398,6 @@ if st.button("▶️ Run Screener"):
         raw_data = get_data(tickers)
         merged_data = merge_today(raw_data, df_today)
 
-        st.session_state["data"] = merged_data
         st.session_state["df"] = run_screener(merged_data)
 
     if st.session_state["df"].empty:

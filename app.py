@@ -185,7 +185,7 @@ def prepare_data(df):
         df["Volume"] * (df["High"] + df["Low"] + df["Close"]) / 3
     ).cumsum() / df["Volume"].cumsum()
 
-    return df.iloc[20:]
+    return df.dropna()
 
 
 # =========================
@@ -200,7 +200,52 @@ def get_ara_limit(price):
     else:
         return 0.20
 
+def audit_all(data):
 
+    indonesia_tz = pytz.timezone("Asia/Jakarta")
+    today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
+
+    rows = []
+
+    for ticker, df in data.items():
+
+        if df.empty:
+            rows.append({
+                "Ticker": ticker,
+                "Last Date": None,
+                "Is Today": False,
+                "Close": None,
+                "Status": "EMPTY"
+            })
+            continue
+
+        last_date = df.index.max()
+        last_close = df["Close"].iloc[-1]
+
+        status = "OK"
+
+        if last_date != today:
+            status = "❌ NO TODAY DATA"
+
+        if pd.isna(last_close):
+            status = "❌ CLOSE NaN"
+
+        rows.append({
+            "Ticker": ticker,
+            "Last Date": last_date,
+            "Is Today": last_date == today,
+            "Close": last_close,
+            "Status": status
+        })
+
+    audit_df = pd.DataFrame(rows)
+
+    st.write("===== AUDIT ALL =====")
+    st.dataframe(audit_df)
+
+    # ringkasan
+    st.write("SUMMARY:")
+    st.write(audit_df["Status"].value_counts())
 # =========================
 # SIGNAL
 # =========================
@@ -240,7 +285,7 @@ def is_signal(df, i):
         prev_close < close and
         close > sma5 and
         value > 10_000_000_000
-       # value_ratio > 2
+        value_ratio > 2
     ):
         return False
 
@@ -377,7 +422,7 @@ if st.button("▶️ Run Screener"):
 
         raw_data = get_data(tickers)
         merged_data = merge_today(raw_data, df_today)
-
+        audit_all(merged_data)
         st.session_state["data"] = merged_data
         df = run_screener(merged_data)
 

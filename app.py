@@ -165,7 +165,14 @@ def merge_today(data, df_today):
             "Close": row["Close"],
             "Volume": row["Volume"]
         }], index=[today_date])
-
+        st.write("CSV DATA:", ticker)
+        st.write({
+            "Open": row["Open"],
+            "High": row["High"],
+            "Low": row["Low"],
+            "Close": row["Close"],
+            "Volume": row["Volume"]
+        })
         # =========================
         # APPEND (TANPA OVERWRITE)
         # =========================

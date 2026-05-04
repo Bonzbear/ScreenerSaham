@@ -118,24 +118,41 @@ if uploaded_file:
     st.dataframe(df_hist.tail(5))
 
     # =========================
-    # MERGE
-    # =========================
-    indonesia_tz = pytz.timezone("Asia/Jakarta")
-    today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
+# MERGE FIX (ANTI ERROR)
+# =========================
 
-    today_row = pd.DataFrame([{
-        "Open": row["Open"],
-        "High": row["High"],
-        "Low": row["Low"],
-        "Close": row["Close"],
-        "Volume": row["Volume"],
-        "Value": row["Value"]
-    }], index=[today])
+# 1. rapikan index yahoo
+df_hist.index = pd.to_datetime(df_hist.index).tz_localize(None)
+df_hist.index = df_hist.index.normalize()
 
-    df = pd.concat([df_hist, today_row])
+# 2. ambil kolom penting saja
+df_hist = df_hist[["Open","High","Low","Close","Volume"]].copy()
 
-    st.subheader("SETELAH MERGE")
-    st.dataframe(df.tail(5))
+# 3. pastikan ada kolom Value di yahoo
+df_hist["Value"] = df_hist["Close"] * df_hist["Volume"]
+
+# 4. buat index hari ini (format HARUS sama)
+today = pd.Timestamp.today().normalize()
+
+# 5. buat row hari ini dari CSV
+today_row = pd.DataFrame([{
+    "Open": row["Open"],
+    "High": row["High"],
+    "Low": row["Low"],
+    "Close": row["Close"],
+    "Volume": row["Volume"],
+    "Value": row["Value"]
+}], index=[today])
+
+# 6. samakan urutan kolom
+df_hist = df_hist[["Open","High","Low","Close","Volume","Value"]]
+
+# 7. concat (sudah aman)
+df = pd.concat([df_hist, today_row])
+
+# 8. rapikan hasil akhir
+df = df.sort_index()
+df = df[~df.index.duplicated(keep="last")]
 
     # =========================
     # PREPARE

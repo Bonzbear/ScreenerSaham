@@ -5,7 +5,7 @@ import datetime
 import pytz
 
 st.set_page_config(layout="wide")
-st.title("DEBUG 1 SAHAM - INDS")
+st.title("DEBUG SAHAM - INDS")
 
 TICKER = "INDS.JK"
 
@@ -44,7 +44,6 @@ def load_csv_today(file):
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
     df["Volume"] = df["Volume"] * 100
-
     df["Ticker"] = df["Code"] + ".JK"
     df["Close"] = df["Last"]
     df["Value"] = df["Value_M"] * 1_000_000
@@ -53,7 +52,7 @@ def load_csv_today(file):
 
 
 # =========================
-# YAHOO H-1
+# YAHOO (H-1)
 # =========================
 def get_yahoo():
 
@@ -65,13 +64,23 @@ def get_yahoo():
 
     df = raw.copy()
 
+    # rapikan index
     df.index = pd.to_datetime(df.index).tz_localize(None)
 
     indonesia_tz = pytz.timezone("Asia/Jakarta")
     today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
 
-    # 🔥 ambil hanya H-1
+    # ambil H-1
     df = df[df.index < today]
+
+    # ambil kolom penting
+    df = df[["Open","High","Low","Close","Volume"]].copy()
+
+    # tambahkan Value
+    df["Value"] = df["Close"] * df["Volume"]
+
+    # normalize index
+    df.index = df.index.normalize()
 
     return df
 
@@ -99,7 +108,9 @@ uploaded_file = st.file_uploader("Upload CSV")
 
 if uploaded_file:
 
+    # =========================
     # CSV
+    # =========================
     df_today = load_csv_today(uploaded_file)
 
     if df_today.empty:
@@ -111,48 +122,41 @@ if uploaded_file:
     st.subheader("CSV (Hari Ini)")
     st.write(row)
 
+    # =========================
     # YAHOO
+    # =========================
     df_hist = get_yahoo()
 
     st.subheader("Yahoo (H-1)")
     st.dataframe(df_hist.tail(5))
 
     # =========================
-# MERGE FIX (ANTI ERROR)
-# =========================
+    # MERGE (FIX FINAL)
+    # =========================
+    indonesia_tz = pytz.timezone("Asia/Jakarta")
+    today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
 
-# 1. rapikan index yahoo
-df_hist.index = pd.to_datetime(df_hist.index).tz_localize(None)
-df_hist.index = df_hist.index.normalize()
+    today_row = pd.DataFrame([{
+        "Open": row["Open"],
+        "High": row["High"],
+        "Low": row["Low"],
+        "Close": row["Close"],
+        "Volume": row["Volume"],
+        "Value": row["Value"]
+    }], index=[today])
 
-# 2. ambil kolom penting saja
-df_hist = df_hist[["Open","High","Low","Close","Volume"]].copy()
+    # samakan struktur
+    df_hist = df_hist[["Open","High","Low","Close","Volume","Value"]]
 
-# 3. pastikan ada kolom Value di yahoo
-df_hist["Value"] = df_hist["Close"] * df_hist["Volume"]
+    # CONCAT AMAN
+    df = pd.concat([df_hist, today_row], axis=0)
 
-# 4. buat index hari ini (format HARUS sama)
-today = pd.Timestamp.today().normalize()
+    # rapikan
+    df = df.sort_index()
+    df = df[~df.index.duplicated(keep="last")]
 
-# 5. buat row hari ini dari CSV
-today_row = pd.DataFrame([{
-    "Open": row["Open"],
-    "High": row["High"],
-    "Low": row["Low"],
-    "Close": row["Close"],
-    "Volume": row["Volume"],
-    "Value": row["Value"]
-}], index=[today])
-
-# 6. samakan urutan kolom
-df_hist = df_hist[["Open","High","Low","Close","Volume","Value"]]
-
-# 7. concat (sudah aman)
-df = pd.concat([df_hist, today_row])
-
-# 8. rapikan hasil akhir
-df = df.sort_index()
-df = df[~df.index.duplicated(keep="last")]
+    st.subheader("SETELAH MERGE")
+    st.dataframe(df.tail(5))
 
     # =========================
     # PREPARE
@@ -163,20 +167,20 @@ df = df[~df.index.duplicated(keep="last")]
     st.dataframe(df.tail(5))
 
     # =========================
-    # DEBUG SIGNAL
+    # DEBUG KONDISI
     # =========================
-    st.subheader("DEBUG KONDISI")
+    st.subheader("DEBUG KONDISI SIGNAL")
 
     today = df.iloc[-1]
     prev = df.iloc[-2]
 
     debug = {
-        "close>prev": today["Close"] > prev["Close"],
-        "volume>prev": today["Volume"] > prev["Volume"],
-        "close>sma5": today["Close"] > today["SMA5"],
-        "value>10B": today["Value"] > 10_000_000_000,
-        "avg_value>10B": today["AvgValue20"] > 10_000_000_000,
-        "avg_vol>1jt": today["VOLMA20"] > 1_000_000
+        "close>prev": bool(today["Close"] > prev["Close"]),
+        "volume>prev": bool(today["Volume"] > prev["Volume"]),
+        "close>sma5": bool(today["Close"] > today["SMA5"]),
+        "value>10B": bool(today["Value"] > 10_000_000_000),
+        "avg_value>10B": bool(today["AvgValue20"] > 10_000_000_000),
+        "avg_vol>1jt": bool(today["VOLMA20"] > 1_000_000)
     }
 
     st.write(debug)

@@ -119,7 +119,9 @@ def merge_today(data, df_today):
 
     combined = {}
     indonesia_tz = pytz.timezone("Asia/Jakarta")
-    today_date = pd.Timestamp(datetime.datetime.now(indonesia_tz).date())
+
+    # ✅ tanggal hari ini (sudah dinormalisasi & tanpa timezone)
+    today_date = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
 
     for ticker in df_today["Ticker"].unique():
 
@@ -131,11 +133,10 @@ def merge_today(data, df_today):
         if hist.empty:
             continue
 
-        hist.index = pd.to_datetime(hist.index)
+        # ✅ FIX utama: samakan format index (WAJIB)
+        hist.index = pd.to_datetime(hist.index).tz_localize(None).normalize()
 
         row = df_today[df_today["Ticker"] == ticker].iloc[0]
-
-        last_date = hist.index.max()
 
         new_values = {
             "Open": row["Open"],
@@ -145,11 +146,18 @@ def merge_today(data, df_today):
             "Volume": row["Volume"]
         }
 
+        last_date = hist.index.max()
+
+        # ✅ overwrite jika sudah ada tanggal hari ini
         if last_date == today_date:
-            hist.loc[last_date, ["Open","High","Low","Close","Volume"]] = list(new_values.values())
+            hist.loc[last_date, ["Open", "High", "Low", "Close", "Volume"]] = list(new_values.values())
         else:
+            # ✅ tambah baris baru jika belum ada
             new_row = pd.DataFrame([new_values], index=[today_date])
             hist = pd.concat([hist, new_row])
+
+        # ✅ pastikan urutan rapi
+        hist = hist.sort_index()
 
         combined[ticker] = hist
 

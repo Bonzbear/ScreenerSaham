@@ -357,7 +357,39 @@ def backtest_ev(df):
 
     return round(winrate * 100, 2), round(ev * 100, 2)
 
+def audit_after_prepare(data):
 
+    indonesia_tz = pytz.timezone("Asia/Jakarta")
+    today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
+
+    rows = []
+
+    for ticker, df in data.items():
+
+        df2 = prepare_data(df)
+
+        if df2.empty:
+            rows.append({
+                "Ticker": ticker,
+                "Last Date": None,
+                "Status": "❌ EMPTY AFTER PREPARE"
+            })
+            continue
+
+        last_date = df2.index.max()
+
+        status = "OK"
+        if last_date != today:
+            status = "❌ LOST TODAY ROW"
+
+        rows.append({
+            "Ticker": ticker,
+            "Last Date": last_date,
+            "Status": status
+        })
+
+    st.write("===== AUDIT AFTER PREPARE =====")
+    st.dataframe(pd.DataFrame(rows))
 # =========================
 # SCREENER
 # =========================
@@ -423,6 +455,7 @@ if st.button("▶️ Run Screener"):
         raw_data = get_data(tickers)
         merged_data = merge_today(raw_data, df_today)
         audit_all(merged_data)
+        audit_after_prepare(merged_data)
         st.session_state["data"] = merged_data
         df = run_screener(merged_data)
 

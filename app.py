@@ -120,40 +120,32 @@ def merge_today(data, df_today):
     combined = {}
     indonesia_tz = pytz.timezone("Asia/Jakarta")
 
-    # tanggal hari ini
     today_date = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
 
     for ticker in df_today["Ticker"].unique():
 
-        # =========================
-        # DEBUG
-        # =========================
-        st.write("PROCESS:", ticker)
-
         if ticker not in data:
-            st.write("❌ TIDAK ADA DI YAHOO:", ticker)
             continue
 
         hist = data[ticker].copy()
 
         if hist.empty:
-            st.write("❌ DATA KOSONG:", ticker)
             continue
 
-        # =========================
-        # FIX INDEX
-        # =========================
+        # rapikan index
         hist.index = pd.to_datetime(hist.index).tz_localize(None).normalize()
 
-        st.write("LAST DATE (YAHOO):", hist.index.max())
+        # =========================
+        # AMBIL DATA H-1 SAJA (BERSIH)
+        # =========================
+        hist = hist[hist.index < today_date]
 
         # =========================
-        # AMBIL ROW CSV
+        # AMBIL DATA CSV (HARI INI)
         # =========================
         row_df = df_today[df_today["Ticker"] == ticker]
 
         if row_df.empty:
-            st.write("❌ TIDAK ADA DI CSV:", ticker)
             continue
 
         row = row_df.iloc[0]
@@ -165,22 +157,12 @@ def merge_today(data, df_today):
             "Close": row["Close"],
             "Volume": row["Volume"]
         }], index=[today_date])
-        st.write("CSV DATA:", ticker)
-        st.write({
-            "Open": row["Open"],
-            "High": row["High"],
-            "Low": row["Low"],
-            "Close": row["Close"],
-            "Volume": row["Volume"]
-        })
+
         # =========================
-        # APPEND (TANPA OVERWRITE)
+        # GABUNG
         # =========================
-        hist = hist[hist.index < today_date]
         hist = pd.concat([hist, new_row])
         hist = hist.sort_index()
-
-        st.write("LAST DATE (SETELAH MERGE):", hist.index.max())
 
         combined[ticker] = hist
 
@@ -204,7 +186,7 @@ def prepare_data(df):
         df["Volume"] * (df["High"] + df["Low"] + df["Close"]) / 3
     ).cumsum() / df["Volume"].cumsum()
 
-    return df.dropna()
+    return df.iloc[20:]
 
 
 # =========================
@@ -355,10 +337,7 @@ def run_screener(data):
 
         probability = (score_pct * 0.3) + (winrate * 0.7)
 
-        if ticker == "INDS.JK":
-            st.write("===== FINAL CHECK DI SCREENER =====")
-            st.write(df.tail(3))
-            
+        st.write(data["INDS.JK"].tail(3))     
         results.append({
             "Ticker": ticker,
             "Price": df["Close"].iloc[-1],
@@ -397,10 +376,11 @@ if st.button("▶️ Run Screener"):
         df_today = load_csv_today(uploaded_file)
         tickers = df_today["Ticker"].unique().tolist()
 
-        data = get_data(tickers)
-        data = merge_today(data, df_today)
-        st.session_state["data"] = data
-        df = run_screener(data)
+        raw_data = get_data(tickers)
+        merged_data = merge_today(raw_data, df_today)
+
+        st.session_state["data"] = merged_data
+        df = run_screener(merged_data)
 
     if df.empty:
         st.warning("Tidak ada saham")

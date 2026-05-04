@@ -336,8 +336,6 @@ def backtest_ev(df):
 # SCREENER
 # =========================
 def run_screener(data):
-    st.write("DATA SOURCE CHECK")
-    st.write(list(data.keys())[:5])
     results = []
 
     for ticker, df in data.items():
@@ -356,6 +354,11 @@ def run_screener(data):
         winrate, ev = backtest_ev(df)
 
         probability = (score_pct * 0.3) + (winrate * 0.7)
+
+        if ticker == "INDS.JK":
+            st.write("===== FINAL CHECK DI SCREENER =====")
+            st.write(df.tail(3))
+            
         results.append({
             "Ticker": ticker,
             "Price": df["Close"].iloc[-1],

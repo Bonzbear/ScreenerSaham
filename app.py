@@ -169,7 +169,8 @@ def merge_today(data, df_today):
             "High": row["High"],
             "Low": row["Low"],
             "Close": row["Close"],
-            "Volume": row["Volume"]
+            "Volume": row["Volume"],
+            "Value": row["Value"]
         }], index=[today])
 
         df = pd.concat([hist, today_row])

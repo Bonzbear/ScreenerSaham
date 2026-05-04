@@ -319,11 +319,12 @@ def run_screener(data):
     for ticker, df in data.items():
         st.write("===== MERGE CHECK =====")
         st.write(ticker)
-        st.write(df.tail(2))  # 👈 penting
+        st.write(df.tail(20))  # 👈 penting
         break
         
         df = prepare_data(df)
-
+        st.write("===== AFTER PREPARE =====")
+        st.write(df_prepared.tail(2))
         if len(df) < 30:
             continue
 
@@ -336,7 +337,9 @@ def run_screener(data):
         winrate, ev = backtest_ev(df)
 
         probability = (score_pct * 0.3) + (winrate * 0.7)
-
+        st.write("===== FINAL DF CHECK =====")
+        st.write(ticker)
+        st.write(df.tail(3))
         results.append({
             "Ticker": ticker,
             "Price": df["Close"].iloc[-1],

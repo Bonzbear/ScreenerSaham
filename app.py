@@ -98,6 +98,7 @@ def load_csv_today(file):
 
     df["Ticker"] = df["Code"] + ".JK"
     df["Close"] = df["Last"]
+    df["Value"] = df["Value_M"] * 1_000_000
 
     return df[["Ticker","Open","High","Low","Close","Volume"]]
 
@@ -194,7 +195,6 @@ def prepare_data(df):
     df["VOLMA20"] = df["Volume"].rolling(20).mean()
     df["VOLMA5"] = df["Volume"].rolling(5).mean()
 
-    df["Value"] = df["Close"] * df["Volume"]
     df["AvgValue20"] = df["Value"].rolling(20).mean()
     df["ValueRatio"] = df["Value"] / df["AvgValue20"]
 

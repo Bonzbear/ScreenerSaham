@@ -5,53 +5,61 @@ import datetime
 import pytz
 
 st.set_page_config(page_title="Data Checker", layout="wide")
-st.title("🔍 Data Checker (Yahoo vs CSV)")
+st.title("🔍 Data Checker (Yahoo H-1 vs CSV Hari Ini)")
 
 
 # =========================
-# YAHOO DATA
+# YAHOO (H-1 ONLY)
 # =========================
-st.subheader("📊 Data dari Yahoo")
+st.subheader("📊 Data Yahoo (H-1)")
 
-ticker_input = st.text_input("Masukkan Ticker (contoh: BBCA.JK)", "BBCA.JK")
+ticker_input = st.text_input("Masukkan Ticker", "BBCA.JK")
 
 if st.button("Ambil Data Yahoo"):
 
-    data = yf.download(
+    raw = yf.download(
         tickers=ticker_input,
         period="3mo",
         progress=False
     )
 
-    if data.empty:
+    if raw.empty:
         st.error("Data tidak ditemukan")
     else:
-        df = data.copy()
+        df = raw.copy()
 
-        # rapikan index
+        # rapikan tanggal
         df.index = pd.to_datetime(df.index).tz_localize(None)
 
-        st.write("### Raw Yahoo")
+        # ambil tanggal hari ini
+        indonesia_tz = pytz.timezone("Asia/Jakarta")
+        today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
+
+        # 🔥 FILTER H-1
+        df = df[df.index < today]
+
+        df = df.sort_index()
+
+        st.write("### Yahoo Raw (H-1)")
         st.dataframe(df.tail(10))
 
-        # versi clean
-        df_clean = df[["Open","High","Low","Close","Volume"]].copy()
+        df_clean = df[["Open","High","Low","Close","Volume"]]
 
-        st.write("### Clean Yahoo (OHLCV)")
+        st.write("### Yahoo Clean (OHLCV)")
         st.dataframe(df_clean.tail(10))
 
-        st.write("### Info")
+        st.write("### Info Yahoo")
         st.write({
-            "Last Date": df_clean.index.max(),
+            "Last Date (H-1)": df_clean.index.max(),
             "Last Close": df_clean["Close"].iloc[-1],
             "Last Volume": df_clean["Volume"].iloc[-1]
         })
 
 
 # =========================
-# CSV DATA
+# CSV
 # =========================
-st.subheader("📂 Data dari CSV")
+st.subheader("📂 Data CSV (Hari Ini)")
 
 uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
 
@@ -92,7 +100,7 @@ if uploaded_file:
         )
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # ⚠️ SESUAIKAN JIKA PERLU
+    # ⚠️ sesuaikan jika perlu
     df["Volume"] = df["Volume"] * 100
 
     df["Ticker"] = df["Code"] + ".JK"
@@ -107,40 +115,45 @@ if uploaded_file:
     st.write("### Info CSV")
     st.write({
         "Jumlah Saham": len(df),
-        "Contoh Close": df["Close"].iloc[0],
-        "Contoh Volume": df["Volume"].iloc[0],
-        "Contoh Value": df["Value"].iloc[0]
+        "Sample Close": df["Close"].iloc[0],
+        "Sample Volume": df["Volume"].iloc[0],
+        "Sample Value": df["Value"].iloc[0]
     })
 
 
 # =========================
 # PERBANDINGAN
 # =========================
-st.subheader("⚖️ Perbandingan (1 Ticker)")
+st.subheader("⚖️ Perbandingan (Yahoo H-1 vs CSV Hari Ini)")
 
-compare_ticker = st.text_input("Ticker untuk dibandingkan (contoh: BBCA.JK)")
+compare_ticker = st.text_input("Ticker untuk dibandingkan", "BBCA.JK")
 
-if st.button("Bandingkan"):
+if st.button("Bandingkan Data"):
 
     if not uploaded_file:
         st.warning("Upload CSV dulu")
     else:
 
-        # ambil dari yahoo
-        yahoo = yf.download(
+        # ambil yahoo (H-1)
+        raw = yf.download(
             tickers=compare_ticker,
             period="5d",
             progress=False
         )
 
-        if yahoo.empty:
+        if raw.empty:
             st.error("Yahoo kosong")
         else:
-            yahoo.index = pd.to_datetime(yahoo.index).tz_localize(None)
+            raw.index = pd.to_datetime(raw.index).tz_localize(None)
 
-            last_yahoo = yahoo.iloc[-1]
+            indonesia_tz = pytz.timezone("Asia/Jakarta")
+            today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
 
-            # ambil dari csv
+            raw = raw[raw.index < today]
+            raw = raw.sort_index()
+
+            last_yahoo = raw.iloc[-1]
+
             row = df[df["Ticker"] == compare_ticker]
 
             if row.empty:
@@ -148,8 +161,9 @@ if st.button("Bandingkan"):
             else:
                 row = row.iloc[0]
 
-                st.write("### Yahoo (Terakhir)")
+                st.write("### Yahoo (H-1)")
                 st.write({
+                    "Date": raw.index.max(),
                     "Close": last_yahoo["Close"],
                     "Volume": last_yahoo["Volume"]
                 })

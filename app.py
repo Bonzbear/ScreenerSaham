@@ -120,44 +120,60 @@ def merge_today(data, df_today):
     combined = {}
     indonesia_tz = pytz.timezone("Asia/Jakarta")
 
-    # ✅ tanggal hari ini (sudah dinormalisasi & tanpa timezone)
+    # tanggal hari ini
     today_date = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
 
     for ticker in df_today["Ticker"].unique():
 
+        # =========================
+        # DEBUG
+        # =========================
+        st.write("PROCESS:", ticker)
+
         if ticker not in data:
+            st.write("❌ TIDAK ADA DI YAHOO:", ticker)
             continue
 
         hist = data[ticker].copy()
 
         if hist.empty:
+            st.write("❌ DATA KOSONG:", ticker)
             continue
 
-        # ✅ FIX utama: samakan format index (WAJIB)
+        # =========================
+        # FIX INDEX
+        # =========================
         hist.index = pd.to_datetime(hist.index).tz_localize(None).normalize()
 
-        row = df_today[df_today["Ticker"] == ticker].iloc[0]
+        st.write("LAST DATE (YAHOO):", hist.index.max())
 
-        new_values = {
+        # =========================
+        # AMBIL ROW CSV
+        # =========================
+        row_df = df_today[df_today["Ticker"] == ticker]
+
+        if row_df.empty:
+            st.write("❌ TIDAK ADA DI CSV:", ticker)
+            continue
+
+        row = row_df.iloc[0]
+
+        new_row = pd.DataFrame([{
             "Open": row["Open"],
             "High": row["High"],
             "Low": row["Low"],
             "Close": row["Close"],
             "Volume": row["Volume"]
-        }
+        }], index=[today_date])
 
-        last_date = hist.index.max()
-
-        # ✅ overwrite jika sudah ada tanggal hari ini
-        if last_date == today_date:
-            hist.loc[last_date, ["Open", "High", "Low", "Close", "Volume"]] = list(new_values.values())
-        else:
-            # ✅ tambah baris baru jika belum ada
-            new_row = pd.DataFrame([new_values], index=[today_date])
-            hist = pd.concat([hist, new_row])
-
-        # ✅ pastikan urutan rapi
+        # =========================
+        # APPEND (TANPA OVERWRITE)
+        # =========================
+        hist = hist[hist.index < today_date]
+        hist = pd.concat([hist, new_row])
         hist = hist.sort_index()
+
+        st.write("LAST DATE (SETELAH MERGE):", hist.index.max())
 
         combined[ticker] = hist
 

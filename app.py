@@ -95,7 +95,7 @@ def load_csv_today(file):
 
     df["Ticker"] = df["Code"] + ".JK"
     df["Close"] = df["Last"]
-
+    st.write(df.head())
     return df[["Ticker","Open","High","Low","Close","Volume"]]
 
 

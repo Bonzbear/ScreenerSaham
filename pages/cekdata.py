@@ -52,7 +52,7 @@ def load_csv_today(file):
 
 
 # =========================
-# YAHOO (H-1)
+# YAHOO H-1
 # =========================
 def get_yahoo():
 
@@ -64,22 +64,17 @@ def get_yahoo():
 
     df = raw.copy()
 
-    # rapikan index
     df.index = pd.to_datetime(df.index).tz_localize(None)
 
     indonesia_tz = pytz.timezone("Asia/Jakarta")
     today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
 
-    # ambil H-1
+    # ambil hanya H-1
     df = df[df.index < today]
 
-    # ambil kolom penting
     df = df[["Open","High","Low","Close","Volume"]].copy()
-
-    # tambahkan Value
     df["Value"] = df["Close"] * df["Volume"]
 
-    # normalize index
     df.index = df.index.normalize()
 
     return df
@@ -131,29 +126,35 @@ if uploaded_file:
     st.dataframe(df_hist.tail(5))
 
     # =========================
-    # MERGE (FIX FINAL)
+    # MERGE (FIX FINAL - NO ERROR)
     # =========================
+    df_hist = df_hist.copy()
+
+    # ubah index jadi kolom
+    df_hist = df_hist.reset_index()
+    df_hist.rename(columns={"index": "Date"}, inplace=True)
+
     indonesia_tz = pytz.timezone("Asia/Jakarta")
     today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
 
     today_row = pd.DataFrame([{
+        "Date": today,
         "Open": row["Open"],
         "High": row["High"],
         "Low": row["Low"],
         "Close": row["Close"],
         "Volume": row["Volume"],
         "Value": row["Value"]
-    }], index=[today])
+    }])
 
-    # samakan struktur
-    df_hist = df_hist[["Open","High","Low","Close","Volume","Value"]]
+    # concat aman
+    df = pd.concat([df_hist, today_row], ignore_index=True)
 
-    # CONCAT AMAN
-    df = pd.concat([df_hist, today_row], axis=0)
-
-    # rapikan
-    df = df.sort_index()
-    df = df[~df.index.duplicated(keep="last")]
+    # balik ke timeseries
+    df["Date"] = pd.to_datetime(df["Date"])
+    df = df.sort_values("Date")
+    df = df.drop_duplicates(subset="Date", keep="last")
+    df.set_index("Date", inplace=True)
 
     st.subheader("SETELAH MERGE")
     st.dataframe(df.tail(5))

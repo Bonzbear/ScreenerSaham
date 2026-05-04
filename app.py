@@ -317,14 +317,9 @@ def run_screener(data):
     results = []
 
     for ticker, df in data.items():
-        st.write("===== MERGE CHECK =====")
-        st.write(ticker)
-        st.write(df.tail(20))  # 👈 penting
-        break
         
         df = prepare_data(df)
-        st.write("===== AFTER PREPARE =====")
-        st.write(df_prepared.tail(2))
+        
         if len(df) < 30:
             continue
 

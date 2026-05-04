@@ -185,7 +185,7 @@ def prepare_data(df):
         df["Volume"] * (df["High"] + df["Low"] + df["Close"]) / 3
     ).cumsum() / df["Volume"].cumsum()
 
-    return df.dropna()
+    return df.iloc[20:]
 
 
 # =========================

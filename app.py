@@ -343,6 +343,10 @@ def run_screener(data):
         
         df = prepare_data(df)
         
+        if ticker == "INDS.JK":
+            st.write("===== FINAL CHECK DI SCREENER =====")
+            st.write(df.tail(3))
+            
         if len(df) < 30:
             continue
 
@@ -355,9 +359,6 @@ def run_screener(data):
         winrate, ev = backtest_ev(df)
 
         probability = (score_pct * 0.3) + (winrate * 0.7)
-        st.write("===== FINAL DF CHECK =====")
-        st.write(ticker)
-        st.write(df.tail(10))
         results.append({
             "Ticker": ticker,
             "Price": df["Close"].iloc[-1],

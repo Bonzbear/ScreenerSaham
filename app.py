@@ -395,13 +395,32 @@ def audit_after_prepare(data):
 # =========================
 def run_screener(data):
     results = []
-
+    debug_rows = []
     for ticker, df in data.items():
         
         df = prepare_data(df)
             
         if len(df) < 30:
             continue
+        i = len(df) - 1
+        today = df.iloc[i]
+        prev = df.iloc[i-1]
+        conds = {
+        "volume > prev_volume": today["Volume"] > prev["Volume"],
+        "close > prev_close": today["Close"] > prev["Close"],
+        "close > sma5": today["Close"] > today["SMA5"],
+        "value > 10B": today["Value"] > 10_000_000_000,
+        "value_ratio > 2": today["ValueRatio"] > 2,
+        }
+
+        debug_rows.append({
+        "Ticker": ticker,
+        **conds
+        })
+
+        st.write("===== FILTER CHECK =====")
+        st.dataframe(pd.DataFrame(debug_rows))
+        st.stop()
 
         if not is_signal(df, len(df)-1):
             continue

@@ -95,7 +95,6 @@ def load_csv_today(file):
 
     df["Ticker"] = df["Code"] + ".JK"
     df["Close"] = df["Last"]
-    st.write(df.head(500))
     return df[["Ticker","Open","High","Low","Close","Volume"]]
 
 
@@ -340,7 +339,7 @@ def run_screener(data):
     
         results.append({
             "Ticker": ticker,
-            "Price": df["Close"].iloc[0],
+            "Price": df["Close"].iloc[-1],
             "Warning": warning,
             "Score (%)": round(score_pct,2),
             "Winrate (%)": winrate,

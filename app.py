@@ -100,7 +100,7 @@ def load_csv_today(file):
     df["Close"] = df["Last"]
     df["Value"] = df["Value_M"] * 1_000_000
 
-    return df[["Ticker","Open","High","Low","Close","Volume"]]
+    return df[["Ticker","Open","High","Low","Close","Volume","Value"]]
 
 
 # =========================

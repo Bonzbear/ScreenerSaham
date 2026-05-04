@@ -1,3 +1,5 @@
+
+
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -6,10 +8,10 @@ import datetime
 import pytz
 import numpy as np
 
-
 TOKEN = "8639573881:AAHQfo4YEqjFVMMurZD4-gS416UrMbukGsE" 
 CHAT_ID = "-1003724967633" 
 MAX_SCORE = 1000
+
 
 # =========================
 # TELEGRAM
@@ -17,6 +19,7 @@ MAX_SCORE = 1000
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     requests.post(url, data={"chat_id": CHAT_ID, "text": msg,"parse_mode": "HTML"})
+
 
 def format_telegram(df):
     no = 0
@@ -71,7 +74,6 @@ def load_csv_today(file):
         df = pd.read_csv(file, encoding="latin-1")
 
     df = df[df.iloc[:,1] != "Code"]
-
     df = df.iloc[:, :13]
 
     df.columns = [
@@ -91,79 +93,88 @@ def load_csv_today(file):
         )
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
+    # ⚠️ SESUAIKAN JIKA PERLU (lot vs share)
     df["Volume"] = df["Volume"] * 100
 
     df["Ticker"] = df["Code"] + ".JK"
     df["Close"] = df["Last"]
+
     return df[["Ticker","Open","High","Low","Close","Volume"]]
 
 
 # =========================
-# YAHOO
+# YAHOO (H-1 ONLY)
 # =========================
 @st.cache_data(ttl=600)
 def get_data(tickers):
-    return yf.download(
+
+    raw = yf.download(
         tickers=" ".join(tickers),
         period="5y",
         group_by="ticker",
         progress=False
     )
 
+    indonesia_tz = pytz.timezone("Asia/Jakarta")
+    today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
+
+    clean_data = {}
+
+    for ticker in tickers:
+
+        if ticker not in raw:
+            continue
+
+        df = raw[ticker].copy()
+
+        if df.empty:
+            continue
+
+        df.index = pd.to_datetime(df.index).tz_localize(None).normalize()
+
+        # 🔑 ambil hanya sampai H-1
+        df = df[df.index < today]
+
+        clean_data[ticker] = df
+
+    return clean_data
+
 
 # =========================
-# MERGE
+# MERGE (CSV = HARI INI)
 # =========================
 def merge_today(data, df_today):
 
-    combined = {}
     indonesia_tz = pytz.timezone("Asia/Jakarta")
+    today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
 
-    today_date = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
+    combined = {}
 
-    for ticker in df_today["Ticker"].unique():
+    for ticker, hist in data.items():
 
-        if ticker not in data:
+        if ticker not in df_today["Ticker"].values:
             continue
-
-        hist = data[ticker].copy()
 
         if hist.empty:
             continue
 
-        # rapikan index
         hist.index = pd.to_datetime(hist.index).tz_localize(None).normalize()
+        hist = hist.sort_index()
 
-        # =========================
-        # AMBIL DATA H-1 SAJA (BERSIH)
-        # =========================
-        hist = hist[hist.index < today_date]
+        row = df_today[df_today["Ticker"] == ticker].iloc[0]
 
-        # =========================
-        # AMBIL DATA CSV (HARI INI)
-        # =========================
-        row_df = df_today[df_today["Ticker"] == ticker]
-
-        if row_df.empty:
-            continue
-
-        row = row_df.iloc[0]
-
-        new_row = pd.DataFrame([{
+        today_row = pd.DataFrame([{
             "Open": row["Open"],
             "High": row["High"],
             "Low": row["Low"],
             "Close": row["Close"],
             "Volume": row["Volume"]
-        }], index=[today_date])
+        }], index=[today])
 
-        # =========================
-        # GABUNG
-        # =========================
-        hist = pd.concat([hist, new_row])
-        hist = hist.sort_index()
+        df = pd.concat([hist, today_row])
+        df = df.sort_index()
 
-        combined[ticker] = hist
+        combined[ticker] = df
 
     return combined
 
@@ -172,6 +183,12 @@ def merge_today(data, df_today):
 # PREPARE
 # =========================
 def prepare_data(df):
+
+    df = df.copy()
+
+    # 🔧 penting untuk urutan & konsistensi
+    df = df.sort_index()
+    df = df[~df.index.duplicated(keep='last')]
 
     df["SMA5"] = df["Close"].rolling(5).mean()
     df["VOLMA20"] = df["Volume"].rolling(20).mean()
@@ -200,54 +217,9 @@ def get_ara_limit(price):
     else:
         return 0.20
 
-def audit_all(data):
 
-    indonesia_tz = pytz.timezone("Asia/Jakarta")
-    today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
-
-    rows = []
-
-    for ticker, df in data.items():
-
-        if df.empty:
-            rows.append({
-                "Ticker": ticker,
-                "Last Date": None,
-                "Is Today": False,
-                "Close": None,
-                "Status": "EMPTY"
-            })
-            continue
-
-        last_date = df.index.max()
-        last_close = df["Close"].iloc[-1]
-
-        status = "OK"
-
-        if last_date != today:
-            status = "❌ NO TODAY DATA"
-
-        if pd.isna(last_close):
-            status = "❌ CLOSE NaN"
-
-        rows.append({
-            "Ticker": ticker,
-            "Last Date": last_date,
-            "Is Today": last_date == today,
-            "Close": last_close,
-            "Status": status
-        })
-
-    audit_df = pd.DataFrame(rows)
-
-    st.write("===== AUDIT ALL =====")
-    st.dataframe(audit_df)
-
-    # ringkasan
-    st.write("SUMMARY:")
-    st.write(audit_df["Status"].value_counts())
 # =========================
-# SIGNAL
+# SIGNAL (TIDAK DIUBAH)
 # =========================
 def is_signal(df, i):
 
@@ -284,8 +256,8 @@ def is_signal(df, i):
         volume > prev_volume and
         prev_close < close and
         close > sma5 and
-        value > 10_000_000_000
-        #value_ratio > 2
+        value > 10_000_000_000 and
+        value_ratio > 2
     ):
         return False
 
@@ -293,7 +265,7 @@ def is_signal(df, i):
 
 
 # =========================
-# SCORE
+# SCORE (TIDAK DIUBAH)
 # =========================
 def calculate_score(df):
 
@@ -328,7 +300,7 @@ def calculate_score(df):
 
 
 # =========================
-# BACKTEST + EV
+# BACKTEST (TIDAK DIUBAH)
 # =========================
 def backtest_ev(df):
 
@@ -357,70 +329,21 @@ def backtest_ev(df):
 
     return round(winrate * 100, 2), round(ev * 100, 2)
 
-def audit_after_prepare(data):
 
-    indonesia_tz = pytz.timezone("Asia/Jakarta")
-    today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
-
-    rows = []
-
-    for ticker, df in data.items():
-
-        df2 = prepare_data(df)
-
-        if df2.empty:
-            rows.append({
-                "Ticker": ticker,
-                "Last Date": None,
-                "Status": "❌ EMPTY AFTER PREPARE"
-            })
-            continue
-
-        last_date = df2.index.max()
-
-        status = "OK"
-        if last_date != today:
-            status = "❌ LOST TODAY ROW"
-
-        rows.append({
-            "Ticker": ticker,
-            "Last Date": last_date,
-            "Status": status
-        })
-
-    st.write("===== AUDIT AFTER PREPARE =====")
-    st.dataframe(pd.DataFrame(rows))
 # =========================
-# SCREENER
+# SCREENER (TIDAK DIUBAH)
 # =========================
 def run_screener(data):
+
     results = []
-    debug_rows = []
+
     for ticker, df in data.items():
-        
+
         df = prepare_data(df)
-            
+
         if len(df) < 30:
             continue
-        i = len(df) - 1
-        today = df.iloc[i]
-        prev = df.iloc[i-1]
 
-        conds = {
-            "volume > prev_volume": today["Volume"] > prev["Volume"],
-            "close > prev_close": today["Close"] > prev["Close"],
-            "close > sma5": today["Close"] > today["SMA5"],
-            "value > 10B": today["Value"] > 10_000_000_000,
-            "value_ratio > 2": today["ValueRatio"] > 2,
-        }
-
-        debug_rows.append({
-            "Ticker": ticker,
-            **conds
-        })
-
-        st.write("===== FILTER CHECK =====")
-        st.dataframe(pd.DataFrame(debug_rows))
         if not is_signal(df, len(df)-1):
             continue
 
@@ -431,7 +354,6 @@ def run_screener(data):
 
         probability = (score_pct * 0.3) + (winrate * 0.7)
 
-    
         results.append({
             "Ticker": ticker,
             "Price": df["Close"].iloc[-1],
@@ -449,7 +371,7 @@ def run_screener(data):
         df.insert(0,"Rank",range(1,len(df)+1))
 
     return df
-    
+
 
 # =========================
 # UI
@@ -472,19 +394,18 @@ if st.button("▶️ Run Screener"):
 
         raw_data = get_data(tickers)
         merged_data = merge_today(raw_data, df_today)
-        audit_all(merged_data)
-        audit_after_prepare(merged_data)
-        st.session_state["data"] = merged_data
-        df = run_screener(merged_data)
 
-    if df.empty:
+        st.session_state["data"] = merged_data
+        st.session_state["df"] = run_screener(merged_data)
+
+    if st.session_state["df"].empty:
         st.warning("Tidak ada saham")
     else:
-        st.session_state["df"] = df
-        st.success(f"{len(df)} saham ditemukan")
+        st.success(f"{len(st.session_state['df'])} saham ditemukan")
+
 
 # =========================
-# DISPLAY + CHECKLIST
+# DISPLAY
 # =========================
 if "df" in st.session_state:
 
@@ -498,6 +419,7 @@ if "df" in st.session_state:
     )
 
     st.session_state["edited_df"] = edited_df
+
 
 # =========================
 # TELEGRAM

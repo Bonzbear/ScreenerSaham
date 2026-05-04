@@ -4,82 +4,25 @@ import pandas as pd
 import datetime
 import pytz
 
-st.set_page_config(page_title="Data Checker", layout="wide")
-st.title("🔍 Data Checker (Yahoo H-1 vs CSV Hari Ini)")
+st.set_page_config(layout="wide")
+st.title("DEBUG 1 SAHAM - INDS")
+
+TICKER = "INDS.JK"
 
 
 # =========================
-# YAHOO (H-1 ONLY)
+# LOAD CSV
 # =========================
-st.subheader("📊 Data Yahoo (H-1)")
-
-ticker_input = st.text_input("Masukkan Ticker", "BBCA.JK")
-
-if st.button("Ambil Data Yahoo"):
-
-    raw = yf.download(
-        tickers=ticker_input,
-        period="3mo",
-        progress=False
-    )
-
-    if raw.empty:
-        st.error("Data tidak ditemukan")
-    else:
-        df = raw.copy()
-
-        # rapikan tanggal
-        df.index = pd.to_datetime(df.index).tz_localize(None)
-
-        # ambil tanggal hari ini
-        indonesia_tz = pytz.timezone("Asia/Jakarta")
-        today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
-
-        # 🔥 FILTER H-1
-        df = df[df.index < today]
-
-        df = df.sort_index()
-
-        st.write("### Yahoo Raw (H-1)")
-        st.dataframe(df.tail(10))
-
-        df_clean = df[["Open","High","Low","Close","Volume"]]
-
-        st.write("### Yahoo Clean (OHLCV)")
-        st.dataframe(df_clean.tail(10))
-
-        st.write("### Info Yahoo")
-        st.write({
-            "Last Date (H-1)": df_clean.index.max(),
-            "Last Close": df_clean["Close"].iloc[-1],
-            "Last Volume": df_clean["Volume"].iloc[-1]
-        })
-
-
-# =========================
-# CSV
-# =========================
-st.subheader("📂 Data CSV (Hari Ini)")
-
-uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
-
-if uploaded_file:
-
-    file = uploaded_file
+def load_csv_today(file):
 
     file.seek(0)
+
     try:
         df = pd.read_csv(file, encoding="utf-8")
     except:
         file.seek(0)
         df = pd.read_csv(file, encoding="latin-1")
 
-    st.write("### Raw CSV")
-    st.dataframe(df.head(10))
-
-    # =========================
-    # CLEAN CSV
-    # =========================
     df = df[df.iloc[:,1] != "Code"]
     df = df.iloc[:, :13]
 
@@ -100,83 +43,123 @@ if uploaded_file:
         )
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # ⚠️ sesuaikan jika perlu
     df["Volume"] = df["Volume"] * 100
 
     df["Ticker"] = df["Code"] + ".JK"
     df["Close"] = df["Last"]
     df["Value"] = df["Value_M"] * 1_000_000
 
-    st.write("### Clean CSV")
-    st.dataframe(df[[
-        "Ticker","Open","High","Low","Close","Volume","Value"
-    ]].head(20))
-
-    st.write("### Info CSV")
-    st.write({
-        "Jumlah Saham": len(df),
-        "Sample Close": df["Close"].iloc[0],
-        "Sample Volume": df["Volume"].iloc[0],
-        "Sample Value": df["Value"].iloc[0]
-    })
+    return df[df["Ticker"] == TICKER]
 
 
 # =========================
-# PERBANDINGAN
+# YAHOO H-1
 # =========================
-st.subheader("⚖️ Perbandingan (Yahoo H-1 vs CSV Hari Ini)")
+def get_yahoo():
 
-compare_ticker = st.text_input("Ticker untuk dibandingkan", "BBCA.JK")
+    raw = yf.download(
+        tickers=TICKER,
+        period="6mo",
+        progress=False
+    )
 
-if st.button("Bandingkan Data"):
+    df = raw.copy()
 
-    if not uploaded_file:
-        st.warning("Upload CSV dulu")
-    else:
+    df.index = pd.to_datetime(df.index).tz_localize(None)
 
-        # ambil yahoo (H-1)
-        raw = yf.download(
-            tickers=compare_ticker,
-            period="5d",
-            progress=False
-        )
+    indonesia_tz = pytz.timezone("Asia/Jakarta")
+    today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
 
-        if raw.empty:
-            st.error("Yahoo kosong")
-        else:
-            raw.index = pd.to_datetime(raw.index).tz_localize(None)
+    # 🔥 ambil hanya H-1
+    df = df[df.index < today]
 
-            indonesia_tz = pytz.timezone("Asia/Jakarta")
-            today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
+    return df
 
-            raw = raw[raw.index < today]
-            raw = raw.sort_index()
 
-            last_yahoo = raw.iloc[-1]
+# =========================
+# PREPARE
+# =========================
+def prepare(df):
 
-            row = df[df["Ticker"] == compare_ticker]
+    df = df.copy()
+    df = df.sort_index()
 
-            if row.empty:
-                st.error("Ticker tidak ada di CSV")
-            else:
-                row = row.iloc[0]
+    df["SMA5"] = df["Close"].rolling(5).mean()
+    df["VOLMA20"] = df["Volume"].rolling(20).mean()
+    df["AvgValue20"] = df["Value"].rolling(20).mean()
+    df["ValueRatio"] = df["Value"] / df["AvgValue20"]
 
-                st.write("### Yahoo (H-1)")
-                st.write({
-                    "Date": raw.index.max(),
-                    "Close": last_yahoo["Close"],
-                    "Volume": last_yahoo["Volume"]
-                })
+    return df
 
-                st.write("### CSV (Hari Ini)")
-                st.write({
-                    "Close": row["Close"],
-                    "Volume": row["Volume"],
-                    "Value": row["Value"]
-                })
 
-                st.write("### Selisih")
-                st.write({
-                    "Close Diff": row["Close"] - last_yahoo["Close"],
-                    "Volume Diff": row["Volume"] - last_yahoo["Volume"]
-                })
+# =========================
+# UI
+# =========================
+uploaded_file = st.file_uploader("Upload CSV")
+
+if uploaded_file:
+
+    # CSV
+    df_today = load_csv_today(uploaded_file)
+
+    if df_today.empty:
+        st.error("INDS tidak ada di CSV")
+        st.stop()
+
+    row = df_today.iloc[0]
+
+    st.subheader("CSV (Hari Ini)")
+    st.write(row)
+
+    # YAHOO
+    df_hist = get_yahoo()
+
+    st.subheader("Yahoo (H-1)")
+    st.dataframe(df_hist.tail(5))
+
+    # =========================
+    # MERGE
+    # =========================
+    indonesia_tz = pytz.timezone("Asia/Jakarta")
+    today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
+
+    today_row = pd.DataFrame([{
+        "Open": row["Open"],
+        "High": row["High"],
+        "Low": row["Low"],
+        "Close": row["Close"],
+        "Volume": row["Volume"],
+        "Value": row["Value"]
+    }], index=[today])
+
+    df = pd.concat([df_hist, today_row])
+
+    st.subheader("SETELAH MERGE")
+    st.dataframe(df.tail(5))
+
+    # =========================
+    # PREPARE
+    # =========================
+    df = prepare(df)
+
+    st.subheader("SETELAH PREPARE")
+    st.dataframe(df.tail(5))
+
+    # =========================
+    # DEBUG SIGNAL
+    # =========================
+    st.subheader("DEBUG KONDISI")
+
+    today = df.iloc[-1]
+    prev = df.iloc[-2]
+
+    debug = {
+        "close>prev": today["Close"] > prev["Close"],
+        "volume>prev": today["Volume"] > prev["Volume"],
+        "close>sma5": today["Close"] > today["SMA5"],
+        "value>10B": today["Value"] > 10_000_000_000,
+        "avg_value>10B": today["AvgValue20"] > 10_000_000_000,
+        "avg_vol>1jt": today["VOLMA20"] > 1_000_000
+    }
+
+    st.write(debug)

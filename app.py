@@ -336,16 +336,13 @@ def backtest_ev(df):
 # SCREENER
 # =========================
 def run_screener(data):
-
+    st.write("DATA SOURCE CHECK")
+    st.write(list(data.keys())[:5])
     results = []
 
     for ticker, df in data.items():
         
         df = prepare_data(df)
-        
-        if ticker == "INDS.JK":
-            st.write("===== FINAL CHECK DI SCREENER =====")
-            st.write(df.tail(3))
             
         if len(df) < 30:
             continue

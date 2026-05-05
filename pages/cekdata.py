@@ -50,7 +50,7 @@ def format_telegram(df):
         "\n<b>📌 Entry</b>\n"
         "Pre-closing (bid 3-5 tick di atas IEP)\n\n"
         "<b>🎯 Target</b>\n"
-        "TP fleksibel (bisa >1.5% / ARA)\n\n"
+        "TP fleksibel (bisa >1% / ARA)\n\n"
         "<b>🛑 Risiko</b>\n"
         "CL jika bertahan di bawah support hingga penutupan\n\n"
         "<b>ℹ️ Disclaimer</b>\n"
@@ -231,7 +231,7 @@ def is_signal(df, i):
         prev_close < close and
         close > sma5 and
         value > 10_000_000_000 and
-        value_ratio > 2
+        #value_ratio > 2
     ):
         return False
 

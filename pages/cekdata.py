@@ -7,9 +7,9 @@ import pytz
 import numpy as np
 import re
 
+
 TOKEN = "YOUR_TOKEN"
 CHAT_ID = "YOUR_CHAT_ID"
-MAX_SCORE = 1000
 
 
 # =========================
@@ -25,7 +25,7 @@ def send_telegram(msg):
 
 
 # =========================
-# PARSER PASTE DATA (FIX UTAMA)
+# PARSER PASTE DATA
 # =========================
 def parse_paste_data(text):
 
@@ -35,7 +35,6 @@ def parse_paste_data(text):
 
         line = line.strip()
 
-        # skip header / empty
         if not line:
             continue
         if "Code" in line and "Last" in line:
@@ -43,33 +42,34 @@ def parse_paste_data(text):
         if line.startswith("NO"):
             continue
 
-        # normalize weird characters
+        # remove noise
         line = line.replace("¡ã", "").replace("¡è", "")
 
-        # split by 2+ spaces OR tab
         parts = re.split(r"\s{2,}|\t+", line)
 
-        if len(parts) < 8:
+        if len(parts) < 10:
             continue
 
         try:
-            code = parts[1].strip()
-            last = parts[2].strip()
-            change = parts[3].strip()
-            value_m = parts[4].strip()
-            volume = parts[5].strip()
+            code = parts[1]
 
-            # clean numeric
-            last = float(last.replace(",", ""))
-            value_m = float(value_m.replace(",", "").replace(".", ""))
-            volume = float(volume.replace(",", "").replace(".", ""))
+            last = float(parts[2].replace(",", ""))
+            prev = float(parts[4].replace(",", ""))
+            open_ = float(parts[5].replace(",", ""))
+            high = float(parts[6].replace(",", ""))
+            low = float(parts[7].replace(",", ""))
 
-            ticker = code + ".JK"
+            value = float(parts[8].replace(",", "").replace(".", ""))
+            volume = float(parts[9].replace(",", "").replace(".", ""))
 
             rows.append({
-                "Ticker": ticker,
+                "Ticker": code + ".JK",
+                "Open": open_,
+                "High": high,
+                "Low": low,
                 "Close": last,
-                "Value": value_m * 1_000_000,
+                "Prev": prev,
+                "Value": value,
                 "Volume": volume
             })
 
@@ -83,7 +83,7 @@ def parse_paste_data(text):
 # YAHOO HISTORY
 # =========================
 @st.cache_data(ttl=600)
-def get_data(tickers):
+def get_history(tickers):
 
     raw = yf.download(
         tickers=" ".join(tickers),
@@ -109,7 +109,39 @@ def get_data(tickers):
 
 
 # =========================
-# PREPARE
+# COMBINE TODAY + HISTORY
+# =========================
+def merge_data(hist, today_df):
+
+    combined = {}
+
+    for t in today_df["Ticker"]:
+
+        if t not in hist:
+            continue
+
+        h = hist[t]
+
+        row = today_df[today_df["Ticker"] == t].iloc[0]
+
+        today_row = pd.DataFrame([{
+            "Open": row["Open"],
+            "High": row["High"],
+            "Low": row["Low"],
+            "Close": row["Close"],
+            "Volume": row["Volume"]
+        }], index=[pd.Timestamp.today()])
+
+        df = pd.concat([h, today_row])
+        df = df.sort_index()
+
+        combined[t] = df
+
+    return combined
+
+
+# =========================
+# INDICATOR
 # =========================
 def prepare(df):
 
@@ -122,7 +154,7 @@ def prepare(df):
 
 
 # =========================
-# SIGNAL (FIXED REQUIREMENT)
+# SIGNAL RULE (FIXED)
 # =========================
 def is_signal(df):
 
@@ -138,7 +170,7 @@ def is_signal(df):
     if today["Close"] <= today["SMA5"]:
         return False
 
-    if today["Value"] <= 5_000_000_000:
+    if today["Close"] * today["Volume"] < 5_000_000_000:
         return False
 
     return True
@@ -151,7 +183,7 @@ def run_screener(data):
 
     results = []
 
-    for ticker, df in data.items():
+    for t, df in data.items():
 
         df = prepare(df)
 
@@ -162,9 +194,9 @@ def run_screener(data):
             continue
 
         results.append({
-            "Ticker": ticker,
+            "Ticker": t,
             "Price": df["Close"].iloc[-1],
-            "Value": df["Value"].iloc[-1]
+            "Volume": df["Volume"].iloc[-1]
         })
 
     out = pd.DataFrame(results)
@@ -180,14 +212,11 @@ def run_screener(data):
 # =========================
 def format_msg(df):
 
-    if df.empty:
-        return "Tidak ada signal"
-
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    msg = f"<b>🚨 SIGNAL 🚨</b>\n{now}\n━━━━━━━━━━━━\n"
+    msg = f"<b>🚨 SIGNAL SCREENER 🚨</b>\n{now}\n━━━━━━━━━━━━\n"
 
-    for i, r in df.head(10).iterrows():
+    for i, r in df.iterrows():
         msg += f"{r['Rank']}. <b>{r['Ticker'].replace('.JK','')}</b>\n"
 
     return msg
@@ -196,50 +225,28 @@ def format_msg(df):
 # =========================
 # UI
 # =========================
-st.title("Screener Saham (Paste Data Fix)")
+st.title("Screener Saham (Paste Data + Yahoo History)")
 
-paste_data = st.text_area("Paste Data Hari Ini", height=300)
+paste = st.text_area("Paste Data BEI", height=300)
 
 if st.button("RUN"):
 
-    df_today = parse_paste_data(paste_data)
+    today = parse_paste_data(paste)
 
-    if df_today.empty:
+    if today.empty:
         st.error("Data tidak terbaca")
         st.stop()
 
-    tickers = df_today["Ticker"].tolist()
+    tickers = today["Ticker"].tolist()
 
-    history = get_data(tickers)
+    hist = get_history(tickers)
 
-    combined = {}
+    merged = merge_data(hist, today)
 
-    for t in tickers:
-
-        if t not in history:
-            continue
-
-        hist = history[t]
-
-        today_row = df_today[df_today["Ticker"] == t].iloc[0]
-
-        today_df = pd.DataFrame([{
-            "Open": today_row["Close"],
-            "High": today_row["Close"],
-            "Low": today_row["Close"],
-            "Close": today_row["Close"],
-            "Volume": today_row["Volume"],
-            "Value": today_row["Value"]
-        }], index=[pd.Timestamp.today()])
-
-        full = pd.concat([hist, today_df])
-        combined[t] = full
-
-    result = run_screener(combined)
+    result = run_screener(merged)
 
     st.dataframe(result)
 
     if not result.empty:
-        msg = format_msg(result)
-        send_telegram(msg)
+        send_telegram(format_msg(result))
         st.success("Sent Telegram")

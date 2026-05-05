@@ -146,8 +146,11 @@ def is_signal(df):
     today = df.iloc[-1]
     prev = df.iloc[-2]
 
-    close = today["Close"]
-    volume = today["Volume"]
+    close = float(today["Close"])
+    volume = float(today["Volume"])
+    prev_close = float(prev["Close"])
+
+    sma5 = float(today["SMA5"])
 
     if close < 50 or close > 9700:
         return False
@@ -155,14 +158,13 @@ def is_signal(df):
     if volume < 1_000_000:
         return False
 
-    if close <= today["SMA5"]:
+    if close <= sma5:
         return False
 
-    if volume <= prev["Volume"]:
+    if volume <= float(prev["Volume"]):
         return False
 
     return True
-
 
 # =========================
 # SCREENER

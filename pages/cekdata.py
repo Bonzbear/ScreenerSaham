@@ -1,10 +1,11 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
 import yfinance as yf
+import pandas as pd
 import requests
 import datetime
 import pytz
+import numpy as np
+import re
 
 TOKEN = "YOUR_TOKEN"
 CHAT_ID = "YOUR_CHAT_ID"
@@ -16,225 +17,289 @@ MAX_SCORE = 1000
 # =========================
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": CHAT_ID, "text": msg, "parse_mode": "HTML"})
+    requests.post(url, data={
+        "chat_id": CHAT_ID,
+        "text": msg,
+        "parse_mode": "HTML"
+    })
+
+
+def format_telegram(df):
+    if df.empty:
+        return "Tidak ada sinyal hari ini"
+
+    indonesia_tz = pytz.timezone('Asia/Jakarta')
+    now = datetime.datetime.now(indonesia_tz).strftime("%Y-%m-%d %H:%M")
+
+    msg = f"<b>🚨 SIGNAL TRADE 🚨</b>\n{now}\n"
+    msg += "━━━━━━━━━━━━━━\n"
+
+    for i, (_, row) in enumerate(df.head(5).iterrows(), 1):
+        warning = row["Warning"] if "Warning" in df.columns else ""
+        ticker = row["Ticker"].replace(".JK", "")
+        msg += f"<b>{i}. {ticker} {warning}</b>\n"
+
+    msg += (
+        "\n<b>⚠️ Risiko tinggi / volatilitas tinggi</b>\n"
+        "<b>📌 Entry:</b> Pre-closing\n"
+        "<b>🎯 TP:</b> fleksibel (>1%)\n"
+        "<b>🛑 CL:</b> bawah support\n"
+    )
+
+    return msg
 
 
 # =========================
-# COPY PASTE PARSER (HARI INI)
+# PARSE COPY PASTE DATA
 # =========================
-def parse_today(text):
+def load_pasted_data(text):
 
+    rows = []
     lines = text.strip().split("\n")
-    data = []
 
-    for line in lines[1:]:
-        parts = line.split("\t")
+    for line in lines[1:]:  # skip header
+        parts = re.split(r"\t+", line.strip())
 
         if len(parts) < 5:
             continue
 
         code = parts[0]
-        last = float(parts[1].replace(",", ""))
-        change = float(parts[2].replace("%", "").replace(",", "."))
+        last = parts[1]
+        change_pct = parts[2]
         value = parts[3]
         volume = parts[4]
 
-        # value convert
-        if "B" in value:
-            value = float(value.replace(" B", "")) * 1e9
-        elif "M" in value:
-            value = float(value.replace(" M", "")) * 1e6
-        else:
-            value = float(value)
+        def parse_num(x):
+            x = x.replace(",", "").strip()
 
-        # volume convert
-        if "M" in volume:
-            volume = float(volume.replace(" M", "")) * 1e6
-        elif "K" in volume:
-            volume = float(volume.replace(" K", "")) * 1e3
-        else:
-            volume = float(volume)
+            if "B" in x:
+                return float(x.replace("B", "")) * 1e9
+            elif "M" in x:
+                return float(x.replace("M", "")) * 1e6
+            elif "K" in x:
+                return float(x.replace("K", "")) * 1e3
+            return float(x)
 
-        data.append({
+        rows.append({
             "Ticker": code + ".JK",
-            "Close": last,
-            "ChangePct": change,
-            "Value": value,
-            "Volume": volume
+            "Close": float(last.replace(",", "")),
+            "Change_pct": float(change_pct.replace("%", "").replace(",", ".")),
+            "Value": parse_num(value),
+            "Volume": parse_num(volume),
+            "Open": np.nan,
+            "High": np.nan,
+            "Low": np.nan
         })
 
-    return pd.DataFrame(data)
+    return pd.DataFrame(rows)
 
 
 # =========================
-# YAHOO HISTORICAL
+# YAHOO HISTORY (H-1)
 # =========================
 @st.cache_data(ttl=600)
-def get_history(tickers):
+def get_data(tickers):
 
     raw = yf.download(
         tickers=" ".join(tickers),
-        period="6mo",
+        period="5y",
         group_by="ticker",
         progress=False
     )
 
-    out = {}
+    indonesia_tz = pytz.timezone("Asia/Jakarta")
+    today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
+
+    clean = {}
 
     for t in tickers:
+
         if t not in raw:
             continue
-        df = raw[t].dropna()
-        out[t] = df
 
-    return out
+        df = raw[t].copy()
+        df.index = pd.to_datetime(df.index).tz_localize(None).normalize()
+
+        df = df[df.index < today]
+        df = df.sort_index()
+
+        clean[t] = df
+
+    return clean
 
 
 # =========================
-# TECHNICAL
+# MERGE TODAY + HISTORY
 # =========================
-def prepare(df):
+def merge_today(hist, df_today):
 
-    df = df.copy()
+    indonesia_tz = pytz.timezone("Asia/Jakarta")
+    today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
+
+    merged = {}
+
+    for ticker, h in hist.items():
+
+        row = df_today[df_today["Ticker"] == ticker]
+        if row.empty:
+            continue
+
+        row = row.iloc[0]
+
+        today_df = pd.DataFrame([{
+            "Open": row["Close"],
+            "High": row["Close"],
+            "Low": row["Close"],
+            "Close": row["Close"],
+            "Volume": row["Volume"],
+            "Value": row["Value"]
+        }], index=[today])
+
+        df = pd.concat([h, today_df]).sort_index()
+        merged[ticker] = df
+
+    return merged
+
+
+# =========================
+# PREPARE DATA
+# =========================
+def prepare_data(df):
+
+    df = df.copy().sort_index()
 
     df["SMA5"] = df["Close"].rolling(5).mean()
-    df["SMA20"] = df["Close"].rolling(20).mean()
     df["VOLMA20"] = df["Volume"].rolling(20).mean()
-    df["VWAP"] = (df["Volume"] * df["Close"]).cumsum() / df["Volume"].cumsum()
+    df["VOLMA5"] = df["Volume"].rolling(5).mean()
+
+    df["AvgValue20"] = df["Value"].rolling(20).mean()
+    df["ValueRatio"] = df["Value"] / df["AvgValue20"]
+
+    df["VWAP"] = (
+        df["Volume"] * (df["High"] + df["Low"] + df["Close"]) / 3
+    ).cumsum() / df["Volume"].cumsum()
 
     return df.dropna()
 
 
 # =========================
-# SIGNAL (INI YANG KAMU MAU TETAP ADA)
+# SIGNAL
 # =========================
-def is_signal(df, today_row, hist):
+def is_signal(df, i):
 
-    hist = prepare(hist)
-
-    if len(hist) < 20:
+    if i < 2:
         return False
 
-    last = hist.iloc[-1]
-    prev = hist.iloc[-2]
+    today = df.iloc[i]
+    prev = df.iloc[i-1]
 
-    # trend confirmation
-    cond1 = last["Close"] > last["SMA5"]
-    cond2 = last["SMA5"] > last["SMA20"]
+    change_pct = (today["Close"] - prev["Close"]) / prev["Close"]
 
-    # volume breakout
-    cond3 = last["Volume"] > last["VOLMA20"]
+    if today["Close"] > 6500 or today["Close"] < 100:
+        return False
 
-    # price momentum
-    cond4 = last["Close"] > prev["Close"]
+    if not (
+        today["Volume"] > prev["Volume"] and
+        today["Close"] > today["SMA5"] and
+        today["Value"] > 1e10 and
+        today["ValueRatio"] > 2
+    ):
+        return False
 
-    # confirmation dari hari ini (copy paste)
-    cond5 = today_row["ChangePct"] > 3
-    cond6 = today_row["Volume"] > last["VOLMA20"]
+    if change_pct > 0.25:
+        return False
 
-    return cond1 and cond2 and cond3 and cond4 and cond5 and cond6
+    return True
 
 
 # =========================
-# SCORE SYSTEM
+# SCORE
 # =========================
-def score(df_today, hist):
+def calculate_score(df):
 
-    hist = prepare(hist)
-
-    last = hist.iloc[-1]
-    prev = hist.iloc[-2]
+    today = df.iloc[-1]
+    prev = df.iloc[-2]
 
     score = 0
     warning = ""
 
-    if last["Close"] > last["SMA5"]:
-        score += 20
-    if last["SMA5"] > last["SMA20"]:
-        score += 20
-    if last["Volume"] > last["VOLMA20"]:
-        score += 20
-    if last["Close"] > prev["Close"]:
-        score += 20
-    if df_today["ChangePct"] > 10:
-        score += 10
-    if df_today["Volume"] > last["VOLMA20"]:
-        score += 10
+    if prev["Close"] < prev["SMA5"]: score += 125
+    if today["Volume"] > today["VOLMA20"]: score += 125
+    if today["Volume"] > today["VOLMA5"]: score += 125
+    if today["Close"] > today["VWAP"]: score += 125
+    if today["Low"] > prev["Low"]: score += 125
+    if today["High"] > prev["High"]: score += 125
 
-    if df_today["ChangePct"] > 25:
-        warning = "⚠️"
+    if today["Close"] > today["Open"]:
+        score += 100
 
     return score, warning
 
 
 # =========================
-# BACKTEST (INI JUGA BALIK)
+# BACKTEST
 # =========================
-def backtest(hist):
-
-    hist = prepare(hist)
+def backtest_ev(df):
 
     returns = []
 
-    for i in range(20, len(hist)-1):
+    for i in range(20, len(df)-1):
 
-        today = hist.iloc[i]
-        nxt = hist.iloc[i+1]
+        if not is_signal(df, i):
+            continue
 
-        ret = (nxt["High"] - today["Close"]) / today["Close"]
+        today = df.iloc[i]
+        next_day = df.iloc[i+1]
+
+        ret = (next_day["High"] - today["Close"]) / today["Close"]
         returns.append(ret)
 
-    if len(returns) == 0:
+    if not returns:
         return 0, 0
 
-    winrate = sum(1 for r in returns if r > 0.015) / len(returns)
-    ev = np.mean(returns)
+    winrate = sum(r >= 0.015 for r in returns) / len(returns)
+    ev = sum(returns) / len(returns)
 
-    return winrate * 100, ev * 100
+    return round(winrate * 100, 2), round(ev * 100, 2)
 
 
 # =========================
-# SCREENER ENGINE (FULL LOGIC)
+# SCREENER
 # =========================
-def run_screener(df_today, hist_data):
+def run_screener(data):
 
     results = []
 
-    for _, row in df_today.iterrows():
+    for ticker, df in data.items():
 
-        ticker = row["Ticker"]
+        df = prepare_data(df)
 
-        if ticker not in hist_data:
+        if len(df) < 30:
             continue
 
-        hist = hist_data[ticker]
-
-        # SIGNAL
-        if not is_signal(df_today, row, hist):
+        if not is_signal(df, len(df)-1):
             continue
 
-        # SCORE
-        sc, warn = score(row, hist)
+        score, warning = calculate_score(df)
 
-        # BACKTEST
-        wr, ev = backtest(hist)
+        winrate, ev = backtest_ev(df)
 
-        probability = (sc * 0.4) + (wr * 0.6)
+        probability = (score * 0.3) + (winrate * 0.7)
 
         results.append({
             "Ticker": ticker,
-            "Price": row["Close"],
-            "Score": sc,
-            "Winrate": round(wr, 2),
-            "EV": round(ev, 2),
-            "Probability": round(probability, 2),
-            "Warning": warn
+            "Price": df["Close"].iloc[-1],
+            "Warning": warning,
+            "Score": score,
+            "Winrate (%)": winrate,
+            "Probability (%)": round(probability, 2),
+            "EV (%)": ev
         })
 
     df = pd.DataFrame(results)
 
     if not df.empty:
-        df = df.sort_values("Probability", ascending=False)
+        df = df.sort_values("Probability (%)", ascending=False)
         df.insert(0, "Rank", range(1, len(df)+1))
 
     return df
@@ -243,44 +308,54 @@ def run_screener(df_today, hist_data):
 # =========================
 # UI
 # =========================
-st.title("Hybrid Screener FIXED (Copy Paste + Yahoo + Signal + Backtest)")
+st.set_page_config(page_title="Screener Saham", layout="wide")
+st.title("Screener Saham Indonesia (Paste Input Mode)")
 
-text = st.text_area("Paste data hari ini")
+text_input = st.text_area("Paste data market hari ini di sini")
 
-if st.button("RUN"):
+if st.button("▶️ Run Screener"):
 
-    df_today = parse_today(text)
+    if not text_input:
+        st.error("Data kosong")
+        st.stop()
 
+    df_today = load_pasted_data(text_input)
     tickers = df_today["Ticker"].tolist()
 
-    hist = get_history(tickers)
+    hist = get_data(tickers)
+    merged = merge_today(hist, df_today)
 
-    result = run_screener(df_today, hist)
+    st.session_state["df"] = run_screener(merged)
 
-    st.session_state["result"] = result
+    st.success("Selesai")
 
 
 # =========================
 # DISPLAY
 # =========================
-if "result" in st.session_state:
-    st.dataframe(st.session_state["result"], use_container_width=True)
+if "df" in st.session_state:
+
+    df_show = st.session_state["df"].copy()
+    df_show["Kirim"] = False
+
+    edited = st.data_editor(df_show, use_container_width=True)
+
+    st.session_state["edited"] = edited
 
 
 # =========================
 # TELEGRAM
 # =========================
-if "result" in st.session_state:
+if "edited" in st.session_state:
 
-    if st.button("SEND TELEGRAM"):
+    if st.button("📤 Telegram"):
 
-        df = st.session_state["result"].head(10)
+        selected = st.session_state["edited"]
+        selected = selected[selected["Kirim"] == True]
 
-        msg = "<b>🚨 SIGNAL LIST 🚨</b>\n\n"
-
-        for i, r in enumerate(df.iterrows(), 1):
-            row = r[1]
-            msg += f"{i}. {row['Ticker']} {row['Warning']} | P:{row['Price']} | S:{row['Score']}\n"
-
-        send_telegram(msg)
-        st.success("sent")
+        if selected.empty:
+            st.warning("Pilih saham dulu")
+        else:
+            msg = format_telegram(selected)
+            send_telegram(msg)
+            st.success("Terkirim")

@@ -1,97 +1,190 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
+import numpy as np
+import yfinance as yf
+import requests
 import datetime
 import pytz
 
-st.set_page_config(layout="wide")
-st.title("DEBUG SAHAM - INDS")
-
-TICKER = "INDS.JK"
-
-
-# =========================
-# LOAD CSV
-# =========================
-def load_csv_today(file):
-
-    file.seek(0)
-
-    try:
-        df = pd.read_csv(file, encoding="utf-8")
-    except:
-        file.seek(0)
-        df = pd.read_csv(file, encoding="latin-1")
-
-    df = df[df.iloc[:,1] != "Code"]
-    df = df.iloc[:, :13]
-
-    df.columns = [
-        "NO","Code","Last","Symbol","Change","Change_pct",
-        "Prev","Open","High","Low","Value_M","Volume","Freq"
-    ]
-
-    num_cols = ["Last","Prev","Open","High","Low","Value_M","Volume"]
-
-    for col in num_cols:
-        df[col] = (
-            df[col]
-            .astype(str)
-            .str.replace(",", "")
-            .str.replace("~", "")
-            .str.replace("∟", "")
-        )
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    df["Volume"] = df["Volume"] * 100
-    df["Ticker"] = df["Code"] + ".JK"
-    df["Close"] = df["Last"]
-    df["Value"] = df["Value_M"] * 1_000_000
-
-    return df[df["Ticker"] == TICKER]
+TOKEN = "YOUR_TOKEN"
+CHAT_ID = "YOUR_CHAT_ID"
+MAX_SCORE = 1000
 
 
 # =========================
-# YAHOO H-1
+# TELEGRAM
 # =========================
-def get_yahoo():
+def send_telegram(msg):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    requests.post(url, data={"chat_id": CHAT_ID, "text": msg, "parse_mode": "HTML"})
+
+
+# =========================
+# PARSE COPY PASTE INPUT
+# =========================
+def parse_input(text):
+
+    lines = text.strip().split("\n")
+
+    data = []
+
+    for line in lines[1:]:  # skip header
+
+        parts = line.split("\t")
+
+        if len(parts) < 5:
+            continue
+
+        code = parts[0].strip()
+        last = float(parts[1].replace(",", ""))
+        change_pct = float(parts[2].replace("%", "").replace(",", "."))
+        value = parts[3].replace(" B", "").replace(" M", "").strip()
+        volume = parts[4].strip()
+
+        # convert value
+        if "B" in parts[3]:
+            value = float(value) * 1_000_000_000
+        elif "M" in parts[3]:
+            value = float(value) * 1_000_000
+        else:
+            value = float(value)
+
+        # convert volume
+        if "M" in volume:
+            volume = float(volume.replace("M", "")) * 1_000_000
+        elif "K" in volume:
+            volume = float(volume.replace("K", "")) * 1_000
+        else:
+            volume = float(volume)
+
+        data.append({
+            "Ticker": code + ".JK",
+            "Close": last,
+            "ChangePct": change_pct,
+            "Value": value,
+            "Volume": volume
+        })
+
+    return pd.DataFrame(data)
+
+
+# =========================
+# YAHOO DATA (H-1)
+# =========================
+@st.cache_data(ttl=600)
+def get_history(tickers):
 
     raw = yf.download(
-        tickers=TICKER,
+        tickers=" ".join(tickers),
         period="6mo",
+        group_by="ticker",
         progress=False
     )
 
-    df = raw.copy()
+    result = {}
 
-    df.index = pd.to_datetime(df.index).tz_localize(None)
+    for t in tickers:
 
-    indonesia_tz = pytz.timezone("Asia/Jakarta")
-    today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
+        if t not in raw:
+            continue
 
-    # ambil hanya H-1
-    df = df[df.index < today]
+        df = raw[t].copy()
+        df = df.dropna()
+        result[t] = df
 
-    df = df[["Open","High","Low","Close","Volume"]].copy()
-    df["Value"] = df["Close"] * df["Volume"]
-
-    df.index = df.index.normalize()
-
-    return df
+    return result
 
 
 # =========================
-# PREPARE
+# PREPARE TECHNICAL
 # =========================
 def prepare(df):
 
     df = df.copy()
-    df = df.sort_index()
 
     df["SMA5"] = df["Close"].rolling(5).mean()
+    df["SMA20"] = df["Close"].rolling(20).mean()
     df["VOLMA20"] = df["Volume"].rolling(20).mean()
-    df["AvgValue20"] = df["Value"].rolling(20).mean()
-    df["ValueRatio"] = df["Value"] / df["AvgValue20"]
+
+    df["VWAP"] = (df["Volume"] * df["Close"]).cumsum() / df["Volume"].cumsum()
+
+    return df.dropna()
+
+
+# =========================
+# SCORING
+# =========================
+def score(df_today, hist):
+
+    hist = prepare(hist)
+
+    if len(hist) < 20:
+        return 0, False
+
+    prev = hist.iloc[-2]
+    last = hist.iloc[-1]
+
+    score = 0
+    warning = False
+
+    # trend
+    if last["Close"] > last["SMA5"]:
+        score += 20
+
+    if last["SMA5"] > last["SMA20"]:
+        score += 20
+
+    # volume spike
+    if last["Volume"] > last["VOLMA20"]:
+        score += 20
+
+    # breakout
+    if last["Close"] > prev["Close"]:
+        score += 20
+
+    # confirm dari hari ini (copy paste)
+    if df_today["ChangePct"] > 5:
+        score += 10
+
+    if df_today["Volume"] > last["VOLMA20"]:
+        score += 10
+
+    # risk warning
+    if df_today["ChangePct"] > 25:
+        warning = True
+
+    return score, warning
+
+
+# =========================
+# SCREENER
+# =========================
+def run_screener(df_today, hist_data):
+
+    results = []
+
+    for _, row in df_today.iterrows():
+
+        ticker = row["Ticker"]
+
+        if ticker not in hist_data:
+            continue
+
+        hist = hist_data[ticker]
+
+        s, warn = score(row, hist)
+
+        results.append({
+            "Ticker": ticker,
+            "Price": row["Close"],
+            "Score": s,
+            "Warning": "⚠️" if warn else ""
+        })
+
+    df = pd.DataFrame(results)
+
+    if not df.empty:
+        df = df.sort_values("Score", ascending=False)
 
     return df
 
@@ -99,89 +192,45 @@ def prepare(df):
 # =========================
 # UI
 # =========================
-uploaded_file = st.file_uploader("Upload CSV")
+st.title("Hybrid Screener (Copy Paste + Yahoo)")
 
-if uploaded_file:
+text = st.text_area("Paste data di sini")
 
-    # =========================
-    # CSV
-    # =========================
-    df_today = load_csv_today(uploaded_file)
+if st.button("RUN"):
 
-    if df_today.empty:
-        st.error("INDS tidak ada di CSV")
-        st.stop()
+    df_today = parse_input(text)
 
-    row = df_today.iloc[0]
+    tickers = df_today["Ticker"].tolist()
 
-    st.subheader("CSV (Hari Ini)")
-    st.write(row)
+    hist_data = get_history(tickers)
 
-    # =========================
-    # YAHOO
-    # =========================
-    df_hist = get_yahoo()
+    result = run_screener(df_today, hist_data)
 
-    st.subheader("Yahoo (H-1)")
-    st.dataframe(df_hist.tail(5))
+    st.session_state["result"] = result
 
-    # =========================
-    # MERGE (FIX FINAL - NO ERROR)
-    # =========================
-    df_hist = df_hist.copy()
 
-    # ubah index jadi kolom
-    df_hist = df_hist.reset_index()
-    df_hist.rename(columns={"index": "Date"}, inplace=True)
+# =========================
+# DISPLAY
+# =========================
+if "result" in st.session_state:
 
-    indonesia_tz = pytz.timezone("Asia/Jakarta")
-    today = pd.Timestamp.now(tz=indonesia_tz).tz_localize(None).normalize()
+    st.dataframe(st.session_state["result"], use_container_width=True)
 
-    today_row = pd.DataFrame([{
-        "Date": today,
-        "Open": row["Open"],
-        "High": row["High"],
-        "Low": row["Low"],
-        "Close": row["Close"],
-        "Volume": row["Volume"],
-        "Value": row["Value"]
-    }])
 
-    # concat aman
-    df = pd.concat([df_hist, today_row], ignore_index=True)
+# =========================
+# TELEGRAM
+# =========================
+if "result" in st.session_state:
 
-    # balik ke timeseries
-    df["Date"] = pd.to_datetime(df["Date"])
-    df = df.sort_values("Date")
-    df = df.drop_duplicates(subset="Date", keep="last")
-    df.set_index("Date", inplace=True)
+    if st.button("SEND TELEGRAM"):
 
-    st.subheader("SETELAH MERGE")
-    st.dataframe(df.tail(5))
+        df = st.session_state["result"].head(10)
 
-    # =========================
-    # PREPARE
-    # =========================
-    df = prepare(df)
+        msg = "<b>🚨 SIGNAL 🚨</b>\n\n"
 
-    st.subheader("SETELAH PREPARE")
-    st.dataframe(df.tail(5))
+        for i, r in enumerate(df.iterrows(), 1):
+            row = r[1]
+            msg += f"{i}. {row['Ticker']} {row['Warning']} (Score {row['Score']})\n"
 
-    # =========================
-    # DEBUG KONDISI
-    # =========================
-    st.subheader("DEBUG KONDISI SIGNAL")
-
-    today = df.iloc[-1]
-    prev = df.iloc[-2]
-
-    debug = {
-        "close>prev": bool(today["Close"] > prev["Close"]),
-        "volume>prev": bool(today["Volume"] > prev["Volume"]),
-        "close>sma5": bool(today["Close"] > today["SMA5"]),
-        "value>10B": bool(today["Value"] > 10_000_000_000),
-        "avg_value>10B": bool(today["AvgValue20"] > 10_000_000_000),
-        "avg_vol>1jt": bool(today["VOLMA20"] > 1_000_000)
-    }
-
-    st.write(debug)
+        send_telegram(msg)
+        st.success("sent")

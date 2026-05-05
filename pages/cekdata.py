@@ -230,8 +230,8 @@ def is_signal(df, i):
         volume > prev_volume and
         prev_close < close and
         close > sma5 and
-        value > 10_000_000_000
-        #value_ratio > 2
+        value > 10_000_000_000 and
+        value_ratio > 2
     ):
         return False
 

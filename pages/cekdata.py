@@ -1,10 +1,10 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import numpy as np
 import requests
 import datetime
 import pytz
+import numpy as np
 import re
 
 TOKEN = "YOUR_TOKEN"
@@ -24,58 +24,53 @@ def send_telegram(msg):
     })
 
 
-def convert_to_number(x):
-
-    x = x.replace(",", "").strip()
-
-    if "B" in x:
-        return float(x.replace("B","")) * 1_000_000_000
-    if "M" in x:
-        return float(x.replace("M","")) * 1_000_000
-    if "K" in x:
-        return float(x.replace("K","")) * 1_000
-
-    return float(x)
-
-
-def parse_today(text):
+# =========================
+# PARSER PASTE DATA (FIX UTAMA)
+# =========================
+def parse_paste_data(text):
 
     rows = []
 
-    for line in text.split("\n"):
+    for line in text.splitlines():
 
         line = line.strip()
 
+        # skip header / empty
         if not line:
             continue
-
-        # skip header
-        if "Code" in line or "NO" in line:
+        if "Code" in line and "Last" in line:
+            continue
+        if line.startswith("NO"):
             continue
 
-        parts = line.split()
+        # normalize weird characters
+        line = line.replace("¡ã", "").replace("¡è", "")
 
-        # minimal safety check
-        if len(parts) < 5:
+        # split by 2+ spaces OR tab
+        parts = re.split(r"\s{2,}|\t+", line)
+
+        if len(parts) < 8:
             continue
 
         try:
-            code = parts[0]
+            code = parts[1].strip()
+            last = parts[2].strip()
+            change = parts[3].strip()
+            value_m = parts[4].strip()
+            volume = parts[5].strip()
 
-            last = parts[1]
-            change = parts[2]
+            # clean numeric
+            last = float(last.replace(",", ""))
+            value_m = float(value_m.replace(",", "").replace(".", ""))
+            volume = float(volume.replace(",", "").replace(".", ""))
 
-            value = parts[-2]
-            volume = parts[-1]
+            ticker = code + ".JK"
 
             rows.append({
-                "Ticker": code + ".JK",
-                "Open": float(last.replace(",", "")),
-                "High": float(last.replace(",", "")),
-                "Low": float(last.replace(",", "")),
-                "Close": float(last.replace(",", "")),
-                "Volume": convert_to_number(volume),
-                "Value": convert_to_number(value)
+                "Ticker": ticker,
+                "Close": last,
+                "Value": value_m * 1_000_000,
+                "Volume": volume
             })
 
         except:
@@ -83,11 +78,12 @@ def parse_today(text):
 
     return pd.DataFrame(rows)
 
+
 # =========================
 # YAHOO HISTORY
 # =========================
 @st.cache_data(ttl=600)
-def get_history(tickers):
+def get_data(tickers):
 
     raw = yf.download(
         tickers=" ".join(tickers),
@@ -99,50 +95,17 @@ def get_history(tickers):
     clean = {}
 
     for t in tickers:
+
         if t not in raw:
             continue
 
         df = raw[t].copy()
-        df = df.dropna()
+        df.index = pd.to_datetime(df.index).tz_localize(None)
+        df = df.sort_index()
 
         clean[t] = df
 
     return clean
-
-
-# =========================
-# MERGE TODAY + YAHOO
-# =========================
-def merge_data(hist, today_df):
-
-    combined = {}
-
-    for _, row in today_df.iterrows():
-
-        t = row["Ticker"]
-
-        if t not in hist:
-            continue
-
-        df = hist[t].copy()
-
-        today_index = pd.Timestamp.today().normalize()
-
-        today_row = pd.DataFrame([{
-            "Open": row["Open"],
-            "High": row["High"],
-            "Low": row["Low"],
-            "Close": row["Close"],
-            "Volume": row["Volume"],
-            "Value": row["Value"]
-        }], index=[today_index])
-
-        df = pd.concat([df, today_row])
-        df = df.sort_index()
-
-        combined[t] = df
-
-    return combined
 
 
 # =========================
@@ -151,33 +114,34 @@ def merge_data(hist, today_df):
 def prepare(df):
 
     df = df.copy()
-    df = df.sort_index()
 
     df["SMA5"] = df["Close"].rolling(5).mean()
     df["VOLMA20"] = df["Volume"].rolling(20).mean()
-
-    df["AvgValue20"] = df["Value"].rolling(20).mean()
 
     return df.dropna()
 
 
 # =========================
-# SIGNAL RULE (SESUAI REQUEST)
+# SIGNAL (FIXED REQUIREMENT)
 # =========================
 def is_signal(df):
-
-    if len(df) < 30:
-        return False
 
     today = df.iloc[-1]
     prev = df.iloc[-2]
 
-    return (
-        today["Volume"] > prev["Volume"] and
-        prev["Close"] < today["Close"] and
-        today["Close"] > today["SMA5"] and
-        today["Value"] > 5_000_000_000
-    )
+    if today["Volume"] <= prev["Volume"]:
+        return False
+
+    if prev["Close"] >= today["Close"]:
+        return False
+
+    if today["Close"] <= today["SMA5"]:
+        return False
+
+    if today["Value"] <= 5_000_000_000:
+        return False
+
+    return True
 
 
 # =========================
@@ -187,24 +151,26 @@ def run_screener(data):
 
     results = []
 
-    for t, df in data.items():
+    for ticker, df in data.items():
 
         df = prepare(df)
+
+        if len(df) < 30:
+            continue
 
         if not is_signal(df):
             continue
 
         results.append({
-            "Ticker": t,
-            "Close": df["Close"].iloc[-1],
-            "Volume": df["Volume"].iloc[-1],
+            "Ticker": ticker,
+            "Price": df["Close"].iloc[-1],
             "Value": df["Value"].iloc[-1]
         })
 
     out = pd.DataFrame(results)
 
     if not out.empty:
-        out = out.sort_values("Value", ascending=False)
+        out.insert(0, "Rank", range(1, len(out) + 1))
 
     return out
 
@@ -214,12 +180,15 @@ def run_screener(data):
 # =========================
 def format_msg(df):
 
+    if df.empty:
+        return "Tidak ada signal"
+
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    msg = f"<b>🚨 SIGNAL 🚨</b>\n{now}\n━━━━━━━━━━\n"
+    msg = f"<b>🚨 SIGNAL 🚨</b>\n{now}\n━━━━━━━━━━━━\n"
 
     for i, r in df.head(10).iterrows():
-        msg += f"<b>{r['Ticker'].replace('.JK','')}</b>\n"
+        msg += f"{r['Rank']}. <b>{r['Ticker'].replace('.JK','')}</b>\n"
 
     return msg
 
@@ -227,38 +196,50 @@ def format_msg(df):
 # =========================
 # UI
 # =========================
-st.title("Screener CopyPaste + Yahoo History")
+st.title("Screener Saham (Paste Data Fix)")
 
-text = st.text_area("Paste data hari ini")
+paste_data = st.text_area("Paste Data Hari Ini", height=300)
 
-if st.button("Run"):
+if st.button("RUN"):
 
-    today_df = parse_today(text)
+    df_today = parse_paste_data(paste_data)
 
-    if today_df.empty:
+    if df_today.empty:
         st.error("Data tidak terbaca")
         st.stop()
 
-    tickers = today_df["Ticker"].tolist()
+    tickers = df_today["Ticker"].tolist()
 
-    hist = get_history(tickers)
-    merged = merge_data(hist, today_df)
+    history = get_data(tickers)
 
-    result = run_screener(merged)
+    combined = {}
+
+    for t in tickers:
+
+        if t not in history:
+            continue
+
+        hist = history[t]
+
+        today_row = df_today[df_today["Ticker"] == t].iloc[0]
+
+        today_df = pd.DataFrame([{
+            "Open": today_row["Close"],
+            "High": today_row["Close"],
+            "Low": today_row["Close"],
+            "Close": today_row["Close"],
+            "Volume": today_row["Volume"],
+            "Value": today_row["Value"]
+        }], index=[pd.Timestamp.today()])
+
+        full = pd.concat([hist, today_df])
+        combined[t] = full
+
+    result = run_screener(combined)
 
     st.dataframe(result)
 
-    st.session_state["result"] = result
-
-
-# =========================
-# TELEGRAM SEND
-# =========================
-if "result" in st.session_state:
-
-    if st.button("Send Telegram"):
-
-        msg = format_msg(st.session_state["result"])
+    if not result.empty:
+        msg = format_msg(result)
         send_telegram(msg)
-
-        st.success("Terkirim")
+        st.success("Sent Telegram")

@@ -24,60 +24,64 @@ def send_telegram(msg):
     })
 
 
-# =========================
-# PARSER COPY PASTE DATA HARI INI
-# =========================
+def convert_to_number(x):
+
+    x = x.replace(",", "").strip()
+
+    if "B" in x:
+        return float(x.replace("B","")) * 1_000_000_000
+    if "M" in x:
+        return float(x.replace("M","")) * 1_000_000
+    if "K" in x:
+        return float(x.replace("K","")) * 1_000
+
+    return float(x)
+
+
 def parse_today(text):
 
     rows = []
-    lines = text.split("\n")
 
-    for line in lines:
+    for line in text.split("\n"):
 
         line = line.strip()
 
-        # skip header / kosong
-        if not line or "Code" in line or "NO" in line:
+        if not line:
             continue
 
-        # normalize weird symbols
-        line = line.replace("¡ã", "").replace("¡è", "")
+        # skip header
+        if "Code" in line or "NO" in line:
+            continue
 
-        parts = re.split(r"\s+", line)
+        parts = line.split()
 
-        if len(parts) < 6:
+        # minimal safety check
+        if len(parts) < 5:
             continue
 
         try:
-            code = parts[1] if parts[0].isdigit() else parts[0]
+            code = parts[0]
 
-            last = parts[2] if parts[0].isdigit() else parts[1]
-            change = parts[3] if parts[0].isdigit() else parts[2]
+            last = parts[1]
+            change = parts[2]
 
-            value = parts[-3]
-            volume = parts[-2]
-
-            last = float(last.replace(",", ""))
-            value = float(value.replace(".", "").replace(",", ""))
-            volume = float(volume.replace(".", "").replace(",", ""))
-
-            ticker = code + ".JK"
+            value = parts[-2]
+            volume = parts[-1]
 
             rows.append({
-                "Ticker": ticker,
-                "Open": last,
-                "High": last,
-                "Low": last,
-                "Close": last,
-                "Volume": volume,
-                "Value": value
+                "Ticker": code + ".JK",
+                "Open": float(last.replace(",", "")),
+                "High": float(last.replace(",", "")),
+                "Low": float(last.replace(",", "")),
+                "Close": float(last.replace(",", "")),
+                "Volume": convert_to_number(volume),
+                "Value": convert_to_number(value)
             })
 
         except:
             continue
 
     return pd.DataFrame(rows)
-
 
 # =========================
 # YAHOO HISTORY

@@ -2,21 +2,28 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import datetime
-import pytz
 
-MAX_SCORE = 1000
+st.set_page_config(page_title="Screener Fix", layout="wide")
+st.title("Screener Saham (Rule Custom)")
+
+# =========================
+# INPUT
+# =========================
+tickers_input = st.text_input(
+    "Ticker (pisah spasi)",
+    "BBCA.JK BBRI.JK BMRI.JK TLKM.JK ASII.JK"
+)
 
 
 # =========================
-# YAHOO DATA
+# DATA YAHOO
 # =========================
 @st.cache_data(ttl=600)
 def get_data(tickers):
 
     raw = yf.download(
         tickers=" ".join(tickers),
-        period="2y",
+        period="1y",
         group_by="ticker",
         progress=False
     )
@@ -30,9 +37,9 @@ def get_data(tickers):
 
         df = raw[t].copy()
         df.index = pd.to_datetime(df.index)
-        df = df.sort_index()
+        df = df.dropna()
 
-        df["Ticker"] = t
+        # value = close * volume
         df["Value"] = df["Close"] * df["Volume"]
 
         data[t] = df
@@ -41,117 +48,86 @@ def get_data(tickers):
 
 
 # =========================
-# PREPARE
+# INDICATOR
 # =========================
 def prepare(df):
 
     df = df.copy()
 
     df["SMA5"] = df["Close"].rolling(5).mean()
-    df["VOLMA20"] = df["Volume"].rolling(20).mean()
-    df["VOLMA5"] = df["Volume"].rolling(5).mean()
-    df["VWAP"] = (df["Volume"] * df["Close"]).cumsum() / df["Volume"].cumsum()
 
     return df.dropna()
 
 
 # =========================
-# SIGNAL (DIPERLEMAH SEMENTARA)
+# RULE SCREENER (SESUAI PERMINTAAN KAMU)
 # =========================
-def is_signal(df, i):
+def signal(df):
 
-    if i < 10:
-        return False
-
-    today = df.iloc[i]
-    prev = df.iloc[i-1]
-
-    if today["Close"] < 50:
-        return False
-
-    if today["Volume"] <= 0:
-        return False
-
-    # 🔥 SIGNAL DIPERMUDAH SUPAYA ADA OUTPUT
-    cond1 = today["Close"] > today["SMA5"]
-    cond2 = today["Volume"] > today["VOLMA20"]
-    cond3 = today["Close"] > prev["Close"]
-
-    return cond1 and cond2 and cond3
-
-
-# =========================
-# SCORE
-# =========================
-def calculate_score(df):
-
-    today = df.iloc[-1]
+    last = df.iloc[-1]
     prev = df.iloc[-2]
 
-    score = 0
+    # RULE 1: volume > prev volume
+    cond1 = last["Volume"] > prev["Volume"]
 
-    if today["Close"] > today["SMA5"]:
-        score += 250
-    if today["Volume"] > today["VOLMA20"]:
-        score += 250
-    if today["Close"] > prev["Close"]:
-        score += 250
-    if today["Close"] > today["VWAP"]:
-        score += 250
+    # RULE 2: prev close < current price
+    cond2 = prev["Close"] < last["Close"]
 
-    return score
+    # RULE 3: current price > SMA5
+    cond3 = last["Close"] > last["SMA5"]
+
+    # RULE 4: value > 5B
+    cond4 = last["Value"] > 5_000_000_000
+
+    return cond1 and cond2 and cond3 and cond4
 
 
 # =========================
 # SCREENER
 # =========================
-def run_screener(data):
+def run(data):
 
     results = []
 
-    for ticker, df in data.items():
+    for t, df in data.items():
+
+        if len(df) < 20:
+            continue
 
         df = prepare(df)
 
-        if len(df) < 30:
+        if not signal(df):
             continue
-
-        if not is_signal(df, len(df)-1):
-            continue
-
-        score = calculate_score(df)
 
         results.append({
-            "Ticker": ticker,
+            "Ticker": t,
             "Price": df["Close"].iloc[-1],
-            "Score": score
+            "Volume": df["Volume"].iloc[-1],
+            "Value": df["Value"].iloc[-1],
         })
 
     out = pd.DataFrame(results)
 
     if not out.empty:
-        out = out.sort_values("Score", ascending=False)
+        out = out.sort_values("Value", ascending=False)
         out.insert(0, "Rank", range(1, len(out)+1))
 
     return out
 
 
 # =========================
-# UI
+# RUN
 # =========================
-st.set_page_config(page_title="Screener Yahoo Only", layout="wide")
-st.title("Screener Saham (Yahoo Only Debug Version)")
-
-tickers_input = st.text_input("Masukkan ticker (pisahkan spasi)", "BBCA.JK BBRI.JK BMRI.JK TLKM.JK ASII.JK")
-
-if st.button("Run"):
+if st.button("RUN SCREENER"):
 
     tickers = tickers_input.split()
 
     data = get_data(tickers)
 
-    result = run_screener(data)
+    result = run(data)
 
-    st.dataframe(result, use_container_width=True)
-
-    st.success(f"Total hasil: {len(result)}")
+    if result.empty:
+        st.warning("Tidak ada signal")
+    else:
+        st.success(f"Signal ditemukan: {len(result)}")
+        st.dataframe(result, use_container_width=True)

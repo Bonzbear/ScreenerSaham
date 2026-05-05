@@ -2,132 +2,259 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import requests
+import datetime
+import pytz
+import re
 
-st.set_page_config(page_title="Screener Fix", layout="wide")
-st.title("Screener Saham (Rule Custom)")
-
-# =========================
-# INPUT
-# =========================
-tickers_input = st.text_input(
-    "Ticker (pisah spasi)",
-    "BBCA.JK BBRI.JK BMRI.JK TLKM.JK ASII.JK"
-)
+TOKEN = "YOUR_TOKEN"
+CHAT_ID = "YOUR_CHAT_ID"
+MAX_SCORE = 1000
 
 
 # =========================
-# DATA YAHOO
+# TELEGRAM
+# =========================
+def send_telegram(msg):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    requests.post(url, data={
+        "chat_id": CHAT_ID,
+        "text": msg,
+        "parse_mode": "HTML"
+    })
+
+
+# =========================
+# PARSER COPY PASTE DATA HARI INI
+# =========================
+def parse_today(text):
+
+    rows = []
+    lines = text.split("\n")
+
+    for line in lines:
+
+        line = line.strip()
+
+        # skip header / kosong
+        if not line or "Code" in line or "NO" in line:
+            continue
+
+        # normalize weird symbols
+        line = line.replace("¡ã", "").replace("¡è", "")
+
+        parts = re.split(r"\s+", line)
+
+        if len(parts) < 6:
+            continue
+
+        try:
+            code = parts[1] if parts[0].isdigit() else parts[0]
+
+            last = parts[2] if parts[0].isdigit() else parts[1]
+            change = parts[3] if parts[0].isdigit() else parts[2]
+
+            value = parts[-3]
+            volume = parts[-2]
+
+            last = float(last.replace(",", ""))
+            value = float(value.replace(".", "").replace(",", ""))
+            volume = float(volume.replace(".", "").replace(",", ""))
+
+            ticker = code + ".JK"
+
+            rows.append({
+                "Ticker": ticker,
+                "Open": last,
+                "High": last,
+                "Low": last,
+                "Close": last,
+                "Volume": volume,
+                "Value": value
+            })
+
+        except:
+            continue
+
+    return pd.DataFrame(rows)
+
+
+# =========================
+# YAHOO HISTORY
 # =========================
 @st.cache_data(ttl=600)
-def get_data(tickers):
+def get_history(tickers):
 
     raw = yf.download(
         tickers=" ".join(tickers),
-        period="1y",
+        period="5y",
         group_by="ticker",
         progress=False
     )
 
-    data = {}
+    clean = {}
 
     for t in tickers:
-
         if t not in raw:
             continue
 
         df = raw[t].copy()
-        df.index = pd.to_datetime(df.index)
         df = df.dropna()
 
-        # value = close * volume
-        df["Value"] = df["Close"] * df["Volume"]
+        clean[t] = df
 
-        data[t] = df
-
-    return data
+    return clean
 
 
 # =========================
-# INDICATOR
+# MERGE TODAY + YAHOO
+# =========================
+def merge_data(hist, today_df):
+
+    combined = {}
+
+    for _, row in today_df.iterrows():
+
+        t = row["Ticker"]
+
+        if t not in hist:
+            continue
+
+        df = hist[t].copy()
+
+        today_index = pd.Timestamp.today().normalize()
+
+        today_row = pd.DataFrame([{
+            "Open": row["Open"],
+            "High": row["High"],
+            "Low": row["Low"],
+            "Close": row["Close"],
+            "Volume": row["Volume"],
+            "Value": row["Value"]
+        }], index=[today_index])
+
+        df = pd.concat([df, today_row])
+        df = df.sort_index()
+
+        combined[t] = df
+
+    return combined
+
+
+# =========================
+# PREPARE
 # =========================
 def prepare(df):
 
     df = df.copy()
+    df = df.sort_index()
 
     df["SMA5"] = df["Close"].rolling(5).mean()
+    df["VOLMA20"] = df["Volume"].rolling(20).mean()
+
+    df["AvgValue20"] = df["Value"].rolling(20).mean()
 
     return df.dropna()
 
 
 # =========================
-# RULE SCREENER (SESUAI PERMINTAAN KAMU)
+# SIGNAL RULE (SESUAI REQUEST)
 # =========================
-def signal(df):
+def is_signal(df):
 
-    last = df.iloc[-1]
+    if len(df) < 30:
+        return False
+
+    today = df.iloc[-1]
     prev = df.iloc[-2]
 
-    # RULE 1: volume > prev volume
-    cond1 = last["Volume"] > prev["Volume"]
-
-    # RULE 2: prev close < current price
-    cond2 = prev["Close"] < last["Close"]
-
-    # RULE 3: current price > SMA5
-    cond3 = last["Close"] > last["SMA5"]
-
-    # RULE 4: value > 5B
-    cond4 = last["Value"] > 5_000_000_000
-
-    return cond1 and cond2 and cond3 and cond4
+    return (
+        today["Volume"] > prev["Volume"] and
+        prev["Close"] < today["Close"] and
+        today["Close"] > today["SMA5"] and
+        today["Value"] > 5_000_000_000
+    )
 
 
 # =========================
 # SCREENER
 # =========================
-def run(data):
+def run_screener(data):
 
     results = []
 
     for t, df in data.items():
 
-        if len(df) < 20:
-            continue
-
         df = prepare(df)
 
-        if not signal(df):
+        if not is_signal(df):
             continue
 
         results.append({
             "Ticker": t,
-            "Price": df["Close"].iloc[-1],
+            "Close": df["Close"].iloc[-1],
             "Volume": df["Volume"].iloc[-1],
-            "Value": df["Value"].iloc[-1],
+            "Value": df["Value"].iloc[-1]
         })
 
     out = pd.DataFrame(results)
 
     if not out.empty:
         out = out.sort_values("Value", ascending=False)
-        out.insert(0, "Rank", range(1, len(out)+1))
 
     return out
 
 
 # =========================
-# RUN
+# TELEGRAM FORMAT
 # =========================
-if st.button("RUN SCREENER"):
+def format_msg(df):
 
-    tickers = tickers_input.split()
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    data = get_data(tickers)
+    msg = f"<b>🚨 SIGNAL 🚨</b>\n{now}\n━━━━━━━━━━\n"
 
-    result = run(data)
+    for i, r in df.head(10).iterrows():
+        msg += f"<b>{r['Ticker'].replace('.JK','')}</b>\n"
 
-    if result.empty:
-        st.warning("Tidak ada signal")
-    else:
-        st.success(f"Signal ditemukan: {len(result)}")
-        st.dataframe(result, use_container_width=True)
+    return msg
+
+
+# =========================
+# UI
+# =========================
+st.title("Screener CopyPaste + Yahoo History")
+
+text = st.text_area("Paste data hari ini")
+
+if st.button("Run"):
+
+    today_df = parse_today(text)
+
+    if today_df.empty:
+        st.error("Data tidak terbaca")
+        st.stop()
+
+    tickers = today_df["Ticker"].tolist()
+
+    hist = get_history(tickers)
+    merged = merge_data(hist, today_df)
+
+    result = run_screener(merged)
+
+    st.dataframe(result)
+
+    st.session_state["result"] = result
+
+
+# =========================
+# TELEGRAM SEND
+# =========================
+if "result" in st.session_state:
+
+    if st.button("Send Telegram"):
+
+        msg = format_msg(st.session_state["result"])
+        send_telegram(msg)
+
+        st.success("Terkirim")

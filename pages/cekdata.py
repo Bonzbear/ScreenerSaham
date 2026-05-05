@@ -1,252 +1,162 @@
-import streamlit as st
+# ===============================
+# INSTALL
+# ===============================
+!pip -q install yfinance pandas
+
+# ===============================
+# IMPORT
+# ===============================
 import yfinance as yf
 import pandas as pd
-import requests
-import datetime
-import pytz
-import numpy as np
-import re
 
+# ===============================
+# LIST TICKER
+# ===============================
+tickers = ['AALI.JK', 'ABBA.JK', 'ABDA.JK', 'ABMM.JK', 'ACES.JK', 'ACST.JK', 'ADES.JK', 'ADHI.JK', 'AISA.JK', 'AKKU.JK', 'AKPI.JK', 'AKRA.JK', 'AKSI.JK', 'ALDO.JK', 'ALKA.JK', 'ALMI.JK', 'ALTO.JK', 'AMAG.JK', 'AMFG.JK', 'AMIN.JK', 'AMRT.JK', 'ANJT.JK', 'ANTM.JK', 'APEX.JK', 'APIC.JK', 'APII.JK', 'APLI.JK', 'APLN.JK', 'ARGO.JK', 'ARII.JK', 'ARNA.JK', 'ARTA.JK', 'ARTI.JK', 'ARTO.JK', 'ASBI.JK', 'ASDM.JK', 'ASGR.JK', 'ASII.JK', 'ASJT.JK', 'ASMI.JK', 'ASRI.JK', 'ASRM.JK', 'ASSA.JK', 'ATIC.JK', 'AUTO.JK', 'BABP.JK', 'BACA.JK', 'BAJA.JK', 'BALI.JK', 'BAPA.JK', 'BATA.JK', 'BAYU.JK', 'BBCA.JK', 'BBHI.JK', 'BBKP.JK', 'BBLD.JK', 'BBMD.JK', 'BBNI.JK', 'BBRI.JK', 'BBRM.JK', 'BBTN.JK', 'BBYB.JK', 'BCAP.JK', 'BCIC.JK', 'BCIP.JK', 'BDMN.JK', 'BEKS.JK', 'BEST.JK', 'BFIN.JK', 'BGTG.JK', 'BHIT.JK', 'BIKA.JK', 'BIMA.JK', 'BINA.JK', 'BIPI.JK', 'BIPP.JK', 'BIRD.JK', 'BISI.JK', 'BJBR.JK', 'BJTM.JK', 'BKDP.JK', 'BKSL.JK', 'BKSW.JK', 'BLTA.JK', 'BLTZ.JK', 'BMAS.JK', 'BMRI.JK', 'BMSR.JK', 'BMTR.JK', 'BNBA.JK', 'BNBR.JK', 'BNGA.JK', 'BNII.JK', 'BNLI.JK', 'BOLT.JK', 'BPFI.JK', 'BPII.JK', 'BRAM.JK', 'BRMS.JK', 'BRNA.JK', 'BRPT.JK', 'BSDE.JK', 'BSIM.JK', 'BSSR.JK', 'BSWD.JK', 'BTEK.JK', 'BTEL.JK', 'BTON.JK', 'BTPN.JK', 'BUDI.JK', 'BUKK.JK', 'BULL.JK', 'BUMI.JK', 'BUVA.JK', 'BVIC.JK', 'BWPT.JK', 'BYAN.JK', 'CANI.JK', 'CASS.JK', 'CEKA.JK', 'CENT.JK', 'CFIN.JK', 'CINT.JK', 'CITA.JK', 'CLPI.JK', 'CMNP.JK', 'CMPP.JK', 'CNKO.JK', 'CNTX.JK', 'COWL.JK', 'CPIN.JK', 'CPRO.JK', 'CSAP.JK', 'CTBN.JK', 'CTRA.JK', 'CTTH.JK', 'DART.JK', 'DEFI.JK', 'DEWA.JK', 'DGIK.JK', 'DILD.JK', 'DKFT.JK', 'DLTA.JK', 'DMAS.JK', 'DNAR.JK', 'DNET.JK', 'DOID.JK', 'DPNS.JK', 'DSFI.JK', 'DSNG.JK', 'DSSA.JK', 'DUTI.JK', 'DVLA.JK', 'DYAN.JK', 'ECII.JK', 'EKAD.JK', 'ELSA.JK', 'ELTY.JK', 'EMDE.JK', 'EMTK.JK', 'ENRG.JK', 'EPMT.JK', 'ERAA.JK', 'ERTX.JK', 'ESSA.JK', 'ESTI.JK', 'ETWA.JK', 'EXCL.JK', 'FAST.JK', 'FASW.JK', 'FISH.JK', 'FMII.JK', 'FORU.JK', 'FPNI.JK', 'GAMA.JK', 'GDST.JK', 'GDYR.JK', 'GEMA.JK', 'GEMS.JK', 'GGRM.JK', 'GIAA.JK', 'GJTL.JK', 'GLOB.JK', 'GMTD.JK', 'GOLD.JK', 'GOLL.JK', 'GPRA.JK', 'GSMF.JK', 'GTBO.JK', 'GWSA.JK', 'GZCO.JK', 'HADE.JK', 'HDFA.JK', 'HERO.JK', 'HEXA.JK', 'HITS.JK', 'HMSP.JK', 'HOME.JK', 'HOTL.JK', 'HRUM.JK', 'IATA.JK', 'IBFN.JK', 'IBST.JK', 'ICBP.JK', 'ICON.JK', 'IGAR.JK', 'IIKP.JK', 'IKAI.JK', 'IKBI.JK', 'IMAS.JK', 'IMJS.JK', 'IMPC.JK', 'INAF.JK', 'INAI.JK', 'INCI.JK', 'INCO.JK', 'INDF.JK', 'INDR.JK', 'INDS.JK', 'INDX.JK', 'INDY.JK', 'INKP.JK', 'INPC.JK', 'INPP.JK', 'INRU.JK', 'INTA.JK', 'INTD.JK', 'INTP.JK', 'IPOL.JK', 'ISAT.JK', 'ISSP.JK', 'ITMA.JK', 'ITMG.JK', 'JAWA.JK', 'JECC.JK', 'JIHD.JK', 'JKON.JK', 'JPFA.JK', 'JRPT.JK', 'JSMR.JK', 'JSPT.JK', 'JTPE.JK', 'KAEF.JK', 'KARW.JK', 'KBLI.JK', 'KBLM.JK', 'KBLV.JK', 'KBRI.JK', 'KDSI.JK', 'KIAS.JK', 'KICI.JK', 'KIJA.JK', 'KKGI.JK', 'KLBF.JK', 'KOBX.JK', 'KOIN.JK', 'KONI.JK', 'KOPI.JK', 'KPIG.JK', 'KRAS.JK', 'KREN.JK', 'LAPD.JK', 'LCGP.JK', 'LEAD.JK', 'LINK.JK', 'LION.JK', 'LMAS.JK', 'LMPI.JK', 'LMSH.JK', 'LPCK.JK', 'LPGI.JK', 'LPIN.JK', 'LPKR.JK', 'LPLI.JK', 'LPPF.JK', 'LPPS.JK', 'LRNA.JK', 'LSIP.JK', 'LTLS.JK', 'MAGP.JK', 'MAIN.JK', 'MAPI.JK', 'MAYA.JK', 'MBAP.JK', 'MBSS.JK', 'MBTO.JK', 'MCOR.JK', 'MDIA.JK', 'MDKA.JK', 'MDLN.JK', 'MDRN.JK', 'MEDC.JK', 'MEGA.JK', 'MERK.JK', 'META.JK', 'MFMI.JK', 'MGNA.JK', 'MICE.JK', 'MIDI.JK', 'MIKA.JK', 'MIRA.JK', 'MITI.JK', 'MKPI.JK', 'MLBI.JK', 'MLIA.JK', 'MLPL.JK', 'MLPT.JK', 'MMLP.JK', 'MNCN.JK', 'MPMX.JK', 'MPPA.JK', 'MRAT.JK', 'MREI.JK', 'MSKY.JK', 'MTDL.JK', 'MTFN.JK', 'MTLA.JK', 'MTSM.JK', 'MYOH.JK', 'MYOR.JK', 'MYTX.JK', 'NELY.JK', 'NIKL.JK', 'NIRO.JK', 'NISP.JK', 'NOBU.JK', 'NRCA.JK', 'OCAP.JK', 'OKAS.JK', 'OMRE.JK', 'PADI.JK', 'PALM.JK', 'PANR.JK', 'PANS.JK', 'PBRX.JK', 'PDES.JK', 'PEGE.JK', 'PGAS.JK', 'PGLI.JK', 'PICO.JK', 'PJAA.JK', 'PKPK.JK', 'PLAS.JK', 'PLIN.JK', 'PNBN.JK', 'PNBS.JK', 'PNIN.JK', 'PNLF.JK', 'PSAB.JK', 'PSDN.JK', 'PSKT.JK', 'PTBA.JK', 'PTIS.JK', 'PTPP.JK', 'PTRO.JK', 'PTSN.JK', 'PTSP.JK', 'PUDP.JK', 'PWON.JK', 'PYFA.JK', 'RAJA.JK', 'RALS.JK', 'RANC.JK', 'RBMS.JK', 'RDTX.JK', 'RELI.JK', 'RICY.JK', 'RIGS.JK', 'RIMO.JK', 'RODA.JK', 'ROTI.JK', 'RUIS.JK', 'SAFE.JK', 'SAME.JK', 'SCCO.JK', 'SCMA.JK', 'SCPI.JK', 'SDMU.JK', 'SDPC.JK', 'SDRA.JK', 'SGRO.JK', 'SHID.JK', 'SIDO.JK', 'SILO.JK', 'SIMA.JK', 'SIMP.JK', 'SIPD.JK', 'SKBM.JK', 'SKLT.JK', 'SKYB.JK', 'SMAR.JK', 'SMBR.JK', 'SMCB.JK', 'SMDM.JK', 'SMDR.JK', 'SMGR.JK', 'SMMA.JK', 'SMMT.JK', 'SMRA.JK', 'SMRU.JK', 'SMSM.JK', 'SOCI.JK', 'SONA.JK', 'SPMA.JK', 'SQMI.JK', 'SRAJ.JK', 'SRIL.JK', 'SRSN.JK', 'SRTG.JK', 'SSIA.JK', 'SSMS.JK', 'SSTM.JK', 'STAR.JK', 'STTP.JK', 'SUGI.JK', 'SULI.JK', 'SUPR.JK', 'TALF.JK', 'TARA.JK', 'TAXI.JK', 'TBIG.JK', 'TBLA.JK', 'TBMS.JK', 'TCID.JK', 'TELE.JK', 'TFCO.JK', 'TGKA.JK', 'TIFA.JK', 'TINS.JK', 'TIRA.JK', 'TIRT.JK', 'TKIM.JK', 'TLKM.JK', 'TMAS.JK', 'TMPO.JK', 'TOBA.JK', 'TOTL.JK', 'TOTO.JK', 'TOWR.JK', 'TPIA.JK', 'TPMA.JK', 'TRAM.JK', 'TRIL.JK', 'TRIM.JK', 'TRIO.JK', 'TRIS.JK', 'TRST.JK', 'TRUS.JK', 'TSPC.JK', 'ULTJ.JK', 'UNIC.JK', 'UNIT.JK', 'UNSP.JK', 'UNTR.JK', 'UNVR.JK', 'VICO.JK', 'VINS.JK', 'VIVA.JK', 'VOKS.JK', 'VRNA.JK', 'WAPO.JK', 'WEHA.JK', 'WICO.JK', 'WIIM.JK', 'WIKA.JK', 'WINS.JK', 'WOMF.JK', 'WSKT.JK', 'WTON.JK', 'YPAS.JK', 'YULE.JK', 'ZBRA.JK', 'SHIP.JK', 'CASA.JK', 'DAYA.JK', 'DPUM.JK', 'IDPR.JK', 'JGLE.JK', 'KINO.JK', 'MARI.JK', 'MKNT.JK', 'MTRA.JK', 'OASA.JK', 'POWR.JK', 'INCF.JK', 'WSBP.JK', 'PBSA.JK', 'PRDA.JK', 'BOGA.JK', 'BRIS.JK', 'PORT.JK', 'CARS.JK', 'MINA.JK', 'CLEO.JK', 'TAMU.JK', 'CSIS.JK', 'TGRA.JK', 'FIRE.JK', 'TOPS.JK', 'KMTR.JK', 'ARMY.JK', 'MAPB.JK', 'WOOD.JK', 'HRTA.JK', 'MABA.JK', 'HOKI.JK', 'MPOW.JK', 'MARK.JK', 'NASA.JK', 'MDKI.JK', 'BELL.JK', 'KIOS.JK', 'GMFI.JK', 'MTWI.JK', 'ZINC.JK', 'MCAS.JK', 'PPRE.JK', 'WEGE.JK', 'PSSI.JK', 'MORA.JK', 'DWGL.JK', 'PBID.JK', 'JMAS.JK', 'CAMP.JK', 'IPCM.JK', 'PCAR.JK', 'LCKM.JK', 'BOSS.JK', 'HELI.JK', 'JSKY.JK', 'INPS.JK', 'GHON.JK', 'TDPM.JK', 'DFAM.JK', 'NICK.JK', 'BTPS.JK', 'SPTO.JK', 'PRIM.JK', 'HEAL.JK', 'TRUK.JK', 'PZZA.JK', 'TUGU.JK', 'MSIN.JK', 'SWAT.JK', 'TNCA.JK', 'MAPA.JK', 'TCPI.JK', 'IPCC.JK', 'RISE.JK', 'BPTR.JK', 'POLL.JK', 'NFCX.JK', 'MGRO.JK', 'NUSA.JK', 'FILM.JK', 'ANDI.JK', 'LAND.JK', 'MOLI.JK', 'PANI.JK', 'DIGI.JK', 'CITY.JK', 'SAPX.JK', 'SURE.JK', 'HKMU.JK', 'MPRO.JK', 'DUCK.JK', 'GOOD.JK', 'SKRN.JK', 'YELO.JK', 'CAKK.JK', 'SATU.JK', 'SOSS.JK', 'DEAL.JK', 'POLA.JK', 'DIVA.JK', 'LUCK.JK', 'URBN.JK', 'SOTS.JK', 'ZONE.JK', 'PEHA.JK', 'FOOD.JK', 'BEEF.JK', 'POLI.JK', 'CLAY.JK', 'NATO.JK', 'JAYA.JK', 'COCO.JK', 'MTPS.JK', 'CPRI.JK', 'HRME.JK', 'POSA.JK', 'JAST.JK', 'FITT.JK', 'BOLA.JK', 'CCSI.JK', 'SFAN.JK', 'POLU.JK', 'KJEN.JK', 'KAYU.JK', 'ITIC.JK', 'PAMG.JK', 'IPTV.JK', 'BLUE.JK', 'ENVY.JK', 'EAST.JK', 'LIFE.JK', 'FUJI.JK', 'KOTA.JK', 'INOV.JK', 'ARKA.JK', 'SMKL.JK', 'HDIT.JK', 'KEEN.JK', 'BAPI.JK', 'TFAS.JK', 'GGRP.JK', 'OPMS.JK', 'NZIA.JK', 'SLIS.JK', 'PURE.JK', 'IRRA.JK', 'DMMX.JK', 'SINI.JK', 'WOWS.JK', 'ESIP.JK', 'TEBE.JK', 'KEJU.JK', 'PSGO.JK', 'AGAR.JK', 'IFSH.JK', 'REAL.JK', 'IFII.JK', 'PMJS.JK', 'UCID.JK', 'GLVA.JK', 'PGJO.JK', 'AMAR.JK', 'CSRA.JK', 'INDO.JK', 'AMOR.JK', 'TRIN.JK', 'DMND.JK', 'PURA.JK', 'PTPW.JK', 'TAMA.JK', 'IKAN.JK', 'SAMF.JK', 'SBAT.JK', 'KBAG.JK', 'CBMF.JK', 'RONY.JK', 'CSMI.JK', 'BBSS.JK', 'BHAT.JK', 'CASH.JK', 'TECH.JK', 'EPAC.JK', 'UANG.JK', 'PGUN.JK', 'SOFA.JK', 'PPGL.JK', 'TOYS.JK', 'SGER.JK', 'TRJA.JK', 'PNGO.JK', 'SCNP.JK', 'BBSI.JK', 'KMDS.JK', 'PURI.JK', 'SOHO.JK', 'HOMI.JK', 'ROCK.JK', 'ENZO.JK', 'PLAN.JK', 'PTDU.JK', 'ATAP.JK', 'VICI.JK', 'PMMP.JK', 'BANK.JK', 'WMUU.JK', 'EDGE.JK', 'UNIQ.JK', 'BEBS.JK', 'SNLK.JK', 'ZYRX.JK', 'LFLO.JK', 'FIMP.JK', 'TAPG.JK', 'NPGF.JK', 'LUCY.JK', 'ADCP.JK', 'HOPE.JK', 'MGLV.JK', 'TRUE.JK', 'LABA.JK', 'ARCI.JK', 'IPAC.JK', 'MASB.JK', 'BMHS.JK', 'FLMC.JK', 'NICL.JK', 'UVCR.JK', 'BUKA.JK', 'HAIS.JK', 'OILS.JK', 'GPSO.JK', 'MCOL.JK', 'RSGK.JK', 'RUNS.JK', 'SBMA.JK', 'CMNT.JK', 'GTSI.JK', 'IDEA.JK', 'KUAS.JK', 'BOBA.JK', 'MTEL.JK', 'DEPO.JK', 'BINO.JK', 'CMRY.JK', 'WGSH.JK', 'TAYS.JK', 'WMPP.JK', 'RMKE.JK', 'OBMD.JK', 'AVIA.JK', 'IPPE.JK', 'NASI.JK', 'BSML.JK', 'DRMA.JK', 'ADMR.JK', 'SEMA.JK', 'ASLC.JK', 'NETV.JK', 'BAUT.JK', 'ENAK.JK', 'NTBK.JK', 'SMKM.JK', 'STAA.JK', 'NANO.JK', 'BIKE.JK', 'WIRG.JK', 'SICO.JK', 'GOTO.JK', 'TLDN.JK', 'MTMH.JK', 'WINR.JK', 'IBOS.JK', 'OLIV.JK', 'ASHA.JK', 'SWID.JK', 'TRGU.JK', 'ARKO.JK', 'CHEM.JK', 'DEWI.JK', 'AXIO.JK', 'KRYA.JK', 'HATM.JK', 'RCCC.JK', 'GULA.JK', 'JARR.JK', 'AMMS.JK', 'RAFI.JK', 'KKES.JK', 'ELPI.JK', 'EURO.JK', 'KLIN.JK', 'TOOL.JK', 'BUAH.JK', 'CRAB.JK', 'MEDS.JK', 'COAL.JK', 'PRAY.JK', 'CBUT.JK', 'BELI.JK', 'MKTR.JK', 'OMED.JK', 'BSBK.JK', 'PDPP.JK', 'KDTN.JK', 'ZATA.JK', 'NINE.JK', 'MMIX.JK', 'PADA.JK', 'ISAP.JK', 'VTNY.JK', 'SOUL.JK', 'ELIT.JK', 'BEER.JK', 'CBPE.JK', 'SUNI.JK', 'CBRE.JK', 'WINE.JK', 'BMBL.JK', 'PEVE.JK', 'LAJU.JK', 'FWCT.JK', 'NAYZ.JK', 'IRSX.JK', 'PACK.JK', 'VAST.JK', 'CHIP.JK', 'HALO.JK', 'KING.JK', 'PGEO.JK', 'FUTR.JK', 'HILL.JK', 'BDKR.JK', 'PTMP.JK', 'SAGE.JK', 'TRON.JK', 'CUAN.JK', 'NSSS.JK', 'GTRA.JK', 'HAJJ.JK', 'JATI.JK', 'TYRE.JK', 'MPXL.JK', 'SMIL.JK', 'KLAS.JK', 'MAXI.JK', 'VKTR.JK', 'RELF.JK', 'AMMN.JK', 'CRSN.JK', 'GRPM.JK', 'WIDI.JK', 'TGUK.JK', 'INET.JK', 'MAHA.JK', 'RMKO.JK', 'CNMA.JK', 'FOLK.JK', 'HBAT.JK', 'GRIA.JK', 'PPRI.JK', 'ERAL.JK', 'CYBR.JK', 'MUTU.JK', 'LMAX.JK', 'HUMI.JK', 'MSIE.JK', 'RSCH.JK', 'BABY.JK', 'AEGS.JK', 'IOTF.JK', 'KOCI.JK', 'PTPS.JK', 'BREN.JK', 'STRK.JK', 'KOKA.JK', 'LOPI.JK', 'UDNG.JK', 'RGAS.JK', 'MSTI.JK', 'IKPM.JK', 'AYAM.JK', 'SURI.JK', 'ASLI.JK', 'GRPH.JK', 'SMGA.JK', 'UNTD.JK', 'TOSK.JK', 'MPIX.JK', 'ALII.JK', 'MKAP.JK', 'MEJA.JK', 'LIVE.JK', 'HYGN.JK', 'BAIK.JK', 'VISI.JK', 'AREA.JK', 'MHKI.JK', 'ATLA.JK', 'DATA.JK', 'SOLA.JK', 'BATR.JK', 'SPRE.JK', 'PART.JK', 'GOLF.JK', 'ISEA.JK', 'BLES.JK', 'GUNA.JK', 'LABS.JK', 'DOSS.JK', 'NEST.JK', 'PTMR.JK', 'VERN.JK', 'DAAZ.JK', 'BOAT.JK', 'NAIK.JK', 'AADI.JK', 'MDIY.JK', 'KSIX.JK', 'RATU.JK', 'YOII.JK', 'HGII.JK', 'BRRC.JK', 'DGWG.JK', 'CBDK.JK', 'OBAT.JK', 'MINE.JK', 'ASPR.JK', 'PSAT.JK', 'COIN.JK', 'CDIA.JK', 'BLOG.JK', 'MERI.JK', 'CHEK.JK', 'PMUI.JK', 'EMAS.JK', 'PJHB.JK', 'RLCO.JK', 'SUPA.JK', 'KAQI.JK', 'YUPI.JK', 'FORE.JK', 'MDLA.JK', 'DKHH.JK', 'AYLS.JK', 'DADA.JK', 'ASPI.JK', 'ESTA.JK', 'BESS.JK', 'AMAN.JK', 'CARE.JK', 'PIPA.JK', 'NCKL.JK', 'MENN.JK', 'AWAN.JK', 'MBMA.JK', 'RAAM.JK', 'DOOH.JK', 'CGAS.JK', 'NICE.JK', 'MSJA.JK', 'SMLE.JK', 'ACRO.JK', 'MANG.JK', 'WIFI.JK', 'FAPA.JK', 'DCII.JK', 'KETR.JK', 'DGNS.JK', 'UFOE.JK', 'ADMF.JK', 'ADMG.JK', 'ADRO.JK', 'AGII.JK', 'AGRO.JK', 'AGRS.JK', 'AHAP.JK', 'AIMS.JK', 'PNSE.JK', 'POLY.JK', 'POOL.JK', 'PPRO.JK']
 
-TOKEN = "YOUR_TOKEN"
-CHAT_ID = "YOUR_CHAT_ID"
+print("Jumlah ticker:",len(tickers))
 
+# ===============================
+# DOWNLOAD DATA
+# ===============================
+data = yf.download(
+    tickers,
+    period="60d",
+    group_by="ticker",
+    auto_adjust=True,
+    progress=True
+)
 
-# =========================
-# TELEGRAM
-# =========================
-def send_telegram(msg):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    requests.post(url, data={
-        "chat_id": CHAT_ID,
-        "text": msg,
-        "parse_mode": "HTML"
-    })
+hasil=[]
 
+print("\nMulai proses screener...\n")
 
-# =========================
-# PARSER PASTE DATA
-# =========================
-def parse_paste_data(text):
+# ===============================
+# LOOP TICKER
+# ===============================
+for ticker in tickers:
 
-    rows = []
+    try:
 
-    for line in text.splitlines():
+        df = data[ticker].copy()
 
-        line = line.strip()
-
-        if not line:
-            continue
-        if "Code" in line and "Last" in line:
-            continue
-        if line.startswith("NO"):
+        if df.empty or len(df) < 25:
             continue
 
-        # remove noise
-        line = line.replace("¡ã", "").replace("¡è", "")
+        # ==========================
+        # INDIKATOR
+        # ==========================
+        df["SMA5"] = df["Close"].rolling(5).mean()
+        df["VOL_MA20"] = df["Volume"].rolling(20).mean()
+        df["VOL_MA5"] = df["Volume"].rolling(5).mean()
 
-        parts = re.split(r"\s{2,}|\t+", line)
+        tp=(df["High"]+df["Low"]+df["Close"])/3
+        df["VWAP"]=(tp*df["Volume"]).cumsum()/df["Volume"].cumsum()
 
-        if len(parts) < 10:
+        last=df.iloc[-1]
+        prev=df.iloc[-2]
+
+        close=last["Close"]
+        prev_close=prev["Close"]
+
+        volume=last["Volume"]
+        prev_volume=prev["Volume"]
+
+        value=close*volume
+
+        # ==========================
+        # SCREENER V1
+        # ==========================
+        v1 = (
+            volume > prev_volume and
+            prev_close < close and
+            close > last["SMA5"] and
+            value > 5000000000
+        )
+
+        # ==========================
+        # SCREENER V2
+        # ==========================
+        v2 = (
+            volume > prev_volume and
+            prev_close < close and
+            close > last["SMA5"] and
+            value > 5000000000 and
+            (last["High"] / prev_close) >= 1.10
+        )
+
+        if not (v1 or v2):
             continue
 
-        try:
-            code = parts[1]
+        # ==========================
+        # SCORE
+        # ==========================
+        score=0
 
-            last = float(parts[2].replace(",", ""))
-            prev = float(parts[4].replace(",", ""))
-            open_ = float(parts[5].replace(",", ""))
-            high = float(parts[6].replace(",", ""))
-            low = float(parts[7].replace(",", ""))
+        if prev_close < prev["SMA5"]:
+            score+=125
 
-            value = float(parts[8].replace(",", "").replace(".", ""))
-            volume = float(parts[9].replace(",", "").replace(".", ""))
+        if volume > last["VOL_MA20"]:
+            score+=125
 
-            rows.append({
-                "Ticker": code + ".JK",
-                "Open": open_,
-                "High": high,
-                "Low": low,
-                "Close": last,
-                "Prev": prev,
-                "Value": value,
-                "Volume": volume
-            })
+        if volume > last["VOL_MA5"]:
+            score+=125
 
-        except:
-            continue
+        if last["Low"] > prev["Low"]:
+            score+=125
 
-    return pd.DataFrame(rows)
+        if last["High"] > prev["High"]:
+            score+=125
 
+        if (last["Open"]-last["Low"]) > (last["High"]-last["Close"]):
+            score+=125
 
-# =========================
-# YAHOO HISTORY
-# =========================
-@st.cache_data(ttl=600)
-def get_history(tickers):
+        if close > last["VWAP"]:
+            score+=125
 
-    raw = yf.download(
-        tickers=" ".join(tickers),
-        period="5y",
-        group_by="ticker",
-        progress=False
-    )
+        if prev_close < prev["VWAP"]:
+            score+=125
 
-    clean = {}
+        # ==========================
+        # LABEL SIGNAL
+        # ==========================
+        if v1 and v2:
+            signal="V.1 + V.2"
+        elif v1:
+            signal="V.1"
+        else:
+            signal="V.2"
 
-    for t in tickers:
-
-        if t not in raw:
-            continue
-
-        df = raw[t].copy()
-        df.index = pd.to_datetime(df.index).tz_localize(None)
-        df = df.sort_index()
-
-        clean[t] = df
-
-    return clean
-
-
-# =========================
-# COMBINE TODAY + HISTORY
-# =========================
-def merge_data(hist, today_df):
-
-    combined = {}
-
-    for t in today_df["Ticker"]:
-
-        if t not in hist:
-            continue
-
-        h = hist[t]
-
-        row = today_df[today_df["Ticker"] == t].iloc[0]
-
-        today_row = pd.DataFrame([{
-            "Open": row["Open"],
-            "High": row["High"],
-            "Low": row["Low"],
-            "Close": row["Close"],
-            "Volume": row["Volume"]
-        }], index=[pd.Timestamp.today()])
-
-        df = pd.concat([h, today_row])
-        df = df.sort_index()
-
-        combined[t] = df
-
-    return combined
-
-
-# =========================
-# INDICATOR
-# =========================
-def prepare(df):
-
-    df = df.copy()
-
-    df["SMA5"] = df["Close"].rolling(5).mean()
-    df["VOLMA20"] = df["Volume"].rolling(20).mean()
-
-    return df.dropna()
-
-
-# =========================
-# SIGNAL RULE (FIXED)
-# =========================
-def is_signal(df):
-
-    today = df.iloc[-1]
-    prev = df.iloc[-2]
-
-    if today["Volume"] <= prev["Volume"]:
-        return False
-
-    if prev["Close"] >= today["Close"]:
-        return False
-
-    if today["Close"] <= today["SMA5"]:
-        return False
-
-    if today["Close"] * today["Volume"] < 5_000_000_000:
-        return False
-
-    return True
-
-
-# =========================
-# SCREENER
-# =========================
-def run_screener(data):
-
-    results = []
-
-    for t, df in data.items():
-
-        df = prepare(df)
-
-        if len(df) < 30:
-            continue
-
-        if not is_signal(df):
-            continue
-
-        results.append({
-            "Ticker": t,
-            "Price": df["Close"].iloc[-1],
-            "Volume": df["Volume"].iloc[-1]
+        hasil.append({
+            "Ticker":ticker,
+            "Signal":signal,
+            "Score":score,
+            "Close":round(close,2),
+            "Volume":int(volume),
+            "Value":int(value)
         })
 
-    out = pd.DataFrame(results)
+    except:
+        pass
 
-    if not out.empty:
-        out.insert(0, "Rank", range(1, len(out) + 1))
+# ===============================
+# HASIL
+# ===============================
+df=pd.DataFrame(hasil)
 
-    return out
+print("\n======================")
+print("HASIL SCREENER")
+print("======================")
 
+if df.empty:
 
-# =========================
-# TELEGRAM FORMAT
-# =========================
-def format_msg(df):
+    print("Tidak ada saham memenuhi kriteria")
 
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+else:
 
-    msg = f"<b>🚨 SIGNAL SCREENER 🚨</b>\n{now}\n━━━━━━━━━━━━\n"
+    df=df.sort_values(
+        ["Score","Value"],
+        ascending=[False,False]
+    )
 
-    for i, r in df.iterrows():
-        msg += f"{r['Rank']}. <b>{r['Ticker'].replace('.JK','')}</b>\n"
-
-    return msg
-
-
-# =========================
-# UI
-# =========================
-st.title("Screener Saham (Paste Data + Yahoo History)")
-
-paste = st.text_area("Paste Data BEI", height=300)
-
-if st.button("RUN"):
-
-    today = parse_paste_data(paste)
-
-    if today.empty:
-        st.error("Data tidak terbaca")
-        st.stop()
-
-    tickers = today["Ticker"].tolist()
-
-    hist = get_history(tickers)
-
-    merged = merge_data(hist, today)
-
-    result = run_screener(merged)
-
-    st.dataframe(result)
-
-    if not result.empty:
-        send_telegram(format_msg(result))
-        st.success("Sent Telegram")
+    display(df.head(30))

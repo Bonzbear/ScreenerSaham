@@ -108,25 +108,35 @@ def is_signal(df):
     today = df.iloc[-1]
     prev = df.iloc[-2]
 
-    close = scalar(today["Close"])
-    volume = scalar(today["Volume"])
-    prev_close = scalar(prev["Close"])
-    sma5 = scalar(today["SMA5"])
+    close = float(today["Close"])
+    volume = float(today["Volume"])
+    prev_close = float(prev["Close"])
+    sma5 = float(today["SMA5"])
+    value = close * volume
 
+    # price filter
     if close < 50 or close > 9700:
         return False
 
+    # liquidity filter
     if volume < 1_000_000:
         return False
 
+    if value < 10_000_000_000:
+        return False
+
+    # momentum filter
     if close <= sma5:
         return False
 
-    if volume <= scalar(prev["Volume"]):
+    if close <= prev_close:
+        return False
+
+    # volume confirmation
+    if volume <= prev["Volume"]:
         return False
 
     return True
-
 
 # =========================
 # SCORE SYSTEM

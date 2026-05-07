@@ -163,54 +163,49 @@ def merge_today(data, df_today):
 
     for ticker in df_today["Ticker"].unique():
 
-        if ticker not in data:
-            continue
+        try:
 
-        hist = data[ticker].copy()
+            if ticker not in data:
+                continue
 
-        if hist.empty:
-            continue
+            hist = data[ticker].copy()
 
-        # =========================
-        # DATE
-        # =========================
-        hist.index = pd.to_datetime(hist.index)
+            if hist.empty:
+                continue
 
-        hist.index = hist.index.tz_localize(None)
+            # =========================
+            # FIX INDEX
+            # =========================
+            hist.index = pd.to_datetime(hist.index)
+            hist.index = hist.index.tz_localize(None)
+            hist.index = hist.index.normalize()
 
-        hist.index = hist.index.normalize()
+            # =========================
+            # AMBIL DATA CSV
+            # =========================
+            row = df_today[
+                df_today["Ticker"] == ticker
+            ].iloc[0]
 
-        row = df_today[
-            df_today["Ticker"] == ticker
-        ].iloc[0]
+            # =========================
+            # BUAT ROW BARU
+            # =========================
+            hist.loc[today_date, "Open"] = float(row["Open"])
+            hist.loc[today_date, "High"] = float(row["High"])
+            hist.loc[today_date, "Low"] = float(row["Low"])
+            hist.loc[today_date, "Close"] = float(row["Close"])
+            hist.loc[today_date, "Adj Close"] = float(row["Close"])
+            hist.loc[today_date, "Volume"] = float(row["Volume"])
 
-        new_values = {
-            "Open": row["Open"],
-            "High": row["High"],
-            "Low": row["Low"],
-            "Close": row["Close"],
-            "Adj Close": row["Close"],
-            "Volume": row["Volume"]
-        }
+            # =========================
+            # SORT
+            # =========================
+            hist = hist.sort_index()
 
-        # =========================
-        # REMOVE TODAY
-        # =========================
-        hist = hist[hist.index != today_date]
+            combined[ticker] = hist
 
-        # =========================
-        # NEW ROW
-        # =========================
-        new_row = pd.DataFrame(
-            [new_values],
-            index=[today_date]
-        )
-
-        hist = pd.concat([hist, new_row])
-
-        hist = hist.sort_index()
-
-        combined[ticker] = hist
+        except Exception as e:
+            st.write(ticker, e)
 
     return combined
 

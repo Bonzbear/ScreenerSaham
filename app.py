@@ -206,7 +206,8 @@ def merge_today(data, df_today):
 
         except Exception as e:
             st.write(ticker, e)
-
+    st.write("TODAY:", today_date)
+    st.write(hist.tail())
     return combined
 
 

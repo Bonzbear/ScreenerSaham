@@ -86,7 +86,8 @@ def load_csv_today(file):
                 dtype=str,
                 encoding=enc,
                 keep_default_na=False,
-                engine="python"
+                engine="python",
+                on_bad_lines="skip"
             )
 
             break
@@ -95,28 +96,29 @@ def load_csv_today(file):
             continue
 
     if df is None:
-        raise Exception("CSV tidak bisa dibaca")
+        raise Exception("CSV gagal dibaca")
 
     # =========================
-    # HAPUS KOLOM KOSONG
+    # DEBUG
+    # =========================
+    st.write("Jumlah kolom:", len(df.columns))
+    st.write(df.columns)
+
+    # =========================
+    # HAPUS UNNAMED
     # =========================
     df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
 
     # =========================
-    # HAPUS HEADER DOBEL
+    # AMBIL MAKSIMAL 13 KOLOM
     # =========================
-    if "Code" in df.columns:
-        df = df[df["Code"] != "Code"]
+    df = df.iloc[:, :13].copy()
 
     # =========================
-    # RESET INDEX
+    # JIKA KOLOM KURANG
     # =========================
-    df = df.reset_index(drop=True)
-
-    # =========================
-    # AMBIL 13 KOLOM PERTAMA
-    # =========================
-    df = df.iloc[:, :13]
+    while len(df.columns) < 13:
+        df[f"extra_{len(df.columns)}"] = ""
 
     # =========================
     # RENAME
@@ -136,6 +138,11 @@ def load_csv_today(file):
         "Volume",
         "Freq"
     ]
+
+    # =========================
+    # HAPUS HEADER DOBEL
+    # =========================
+    df = df[df["Code"] != "Code"]
 
     # =========================
     # CLEAN STRING

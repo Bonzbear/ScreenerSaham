@@ -158,8 +158,12 @@ def get_data(tickers):
 def merge_today(data, df_today):
 
     combined = {}
+
     indonesia_tz = pytz.timezone("Asia/Jakarta")
-    today_date = pd.Timestamp(datetime.datetime.now(indonesia_tz).date())
+
+    today_date = pd.Timestamp.now(
+        tz=indonesia_tz
+    ).normalize()
 
     for ticker in df_today["Ticker"].unique():
 
@@ -171,30 +175,53 @@ def merge_today(data, df_today):
         if hist.empty:
             continue
 
+        # =========================
+        # NORMALIZE DATE
+        # =========================
         hist.index = pd.to_datetime(hist.index)
 
-        row = df_today[df_today["Ticker"] == ticker].iloc[0]
+        if hist.index.tz is not None:
+            hist.index = hist.index.tz_convert(
+                indonesia_tz
+            )
 
-        last_date = hist.index.max()
+        hist.index = hist.index.normalize()
+
+        row = df_today[
+            df_today["Ticker"] == ticker
+        ].iloc[0]
 
         new_values = {
             "Open": row["Open"],
             "High": row["High"],
             "Low": row["Low"],
             "Close": row["Close"],
+            "Adj Close": row["Close"],
             "Volume": row["Volume"]
         }
 
-        if last_date == today_date:
-            hist.loc[last_date, ["Open","High","Low","Close","Volume"]] = list(new_values.values())
-        else:
-            new_row = pd.DataFrame([new_values], index=[today_date])
-            hist = pd.concat([hist, new_row])
+        # =========================
+        # REMOVE TODAY IF EXISTS
+        # =========================
+        hist = hist[hist.index != today_date]
+
+        # =========================
+        # ADD TODAY ROW
+        # =========================
+        new_row = pd.DataFrame(
+            [new_values],
+            index=[today_date]
+        )
+
+        hist = pd.concat([hist, new_row])
+
+        # =========================
+        # SORT
+        # =========================
+        hist = hist.sort_index()
 
         combined[ticker] = hist
-        if ticker == "ASPR.JK":
-            st.write(hist.tail())
-            st.write(row)
+
     return combined
 
 

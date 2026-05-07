@@ -67,41 +67,104 @@ def load_csv_today(file):
 
     file.seek(0)
 
-    try:
-        df = pd.read_csv(file, encoding="utf-8")
-    except:
-        file.seek(0)
-        df = pd.read_csv(file, encoding="latin-1")
+    df = pd.read_csv(
+        file,
+        dtype=str,
+        encoding="utf-8-sig",
+        keep_default_na=False
+    )
 
-    df = df[df.iloc[:,1] != "Code"]
+    # =========================
+    # HAPUS KOLOM KOSONG
+    # =========================
+    df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
 
-    df = df.iloc[:, :13]
+    # =========================
+    # HAPUS HEADER DOBEL
+    # =========================
+    df = df[df["Code"] != "Code"]
 
+    # =========================
+    # RESET INDEX
+    # =========================
+    df = df.reset_index(drop=True)
+
+    # =========================
+    # RENAME MANUAL
+    # =========================
     df.columns = [
-        "NO","Code","Last","Symbol","Change","Change_pct",
-        "Prev","Open","High","Low","Value_M","Volume","Freq"
+        "NO",
+        "Code",
+        "Last",
+        "Symbol",
+        "Change",
+        "Change_pct",
+        "Prev",
+        "Open",
+        "High",
+        "Low",
+        "Value_M",
+        "Volume",
+        "Freq"
     ]
 
-    num_cols = ["Last","Prev","Open","High","Low","Value_M","Volume"]
+    # =========================
+    # BERSIHKAN STRING
+    # =========================
+    for col in df.columns:
 
-    for col in num_cols:
         df[col] = (
             df[col]
             .astype(str)
-            .str.replace(",", "")
-            .str.replace("~", "")
-            .str.replace("∟", "")
+            .str.strip()
+            .str.replace('"', '', regex=False)
+            .str.replace("��", "", regex=False)
+            .str.replace("~", "", regex=False)
+            .str.replace("∟", "", regex=False)
         )
+
+    # =========================
+    # NUMERIC
+    # =========================
+    num_cols = [
+        "Last",
+        "Prev",
+        "Open",
+        "High",
+        "Low",
+        "Value_M",
+        "Volume",
+        "Freq"
+    ]
+
+    for col in num_cols:
+
+        df[col] = (
+            df[col]
+            .str.replace(",", "", regex=False)
+        )
+
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
+    # =========================
+    # VOLUME LOT -> SHARE
+    # =========================
     df["Volume"] = df["Volume"] * 100
 
+    # =========================
+    # TICKER
+    # =========================
     df["Ticker"] = df["Code"] + ".JK"
     df["Close"] = df["Last"]
 
-    return df[["Ticker","Open","High","Low","Close","Volume"]]
+    # =========================
+    # HAPUS DATA INVALID
+    # =========================
+    df = df.dropna(subset=["Ticker", "Close"])
 
-
+    return df[
+        ["Ticker", "Open", "High", "Low", "Close", "Volume"]
+    ]
 # =========================
 # YAHOO
 # =========================

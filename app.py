@@ -385,6 +385,8 @@ def run_screener(data):
         probability = (score_pct * 0.3) + (winrate * 0.7)
 
         latest = df.sort_index().tail(1)
+        if ticker == "ASPR.JK":
+            st.write(df.tail(10))
         results.append({
             "Ticker": ticker,
             "Price": float(latest["Close"].values[0]),

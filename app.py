@@ -159,11 +159,7 @@ def merge_today(data, df_today):
 
     combined = {}
 
-    indonesia_tz = pytz.timezone("Asia/Jakarta")
-
-    today_date = pd.Timestamp.now(
-        tz=indonesia_tz
-    ).normalize()
+    today_date = pd.Timestamp.today().normalize()
 
     for ticker in df_today["Ticker"].unique():
 
@@ -176,14 +172,11 @@ def merge_today(data, df_today):
             continue
 
         # =========================
-        # NORMALIZE DATE
+        # DATE
         # =========================
         hist.index = pd.to_datetime(hist.index)
 
-        if hist.index.tz is not None:
-            hist.index = hist.index.tz_convert(
-                indonesia_tz
-            )
+        hist.index = hist.index.tz_localize(None)
 
         hist.index = hist.index.normalize()
 
@@ -201,12 +194,12 @@ def merge_today(data, df_today):
         }
 
         # =========================
-        # REMOVE TODAY IF EXISTS
+        # REMOVE TODAY
         # =========================
         hist = hist[hist.index != today_date]
 
         # =========================
-        # ADD TODAY ROW
+        # NEW ROW
         # =========================
         new_row = pd.DataFrame(
             [new_values],
@@ -215,9 +208,6 @@ def merge_today(data, df_today):
 
         hist = pd.concat([hist, new_row])
 
-        # =========================
-        # SORT
-        # =========================
         hist = hist.sort_index()
 
         combined[ticker] = hist

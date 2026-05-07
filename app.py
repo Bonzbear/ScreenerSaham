@@ -203,16 +203,33 @@ def merge_today(data, df_today):
 # =========================
 def prepare_data(df):
 
+    # =========================
+    # SORT DATE
+    # =========================
+    df = df.sort_index()
+
+    # =========================
+    # HAPUS DUPLICATE DATE
+    # =========================
+    df = df[~df.index.duplicated(keep="last")]
+
+    # =========================
+    # INDICATOR
+    # =========================
     df["SMA5"] = df["Close"].rolling(5).mean()
+
     df["VOLMA20"] = df["Volume"].rolling(20).mean()
     df["VOLMA5"] = df["Volume"].rolling(5).mean()
 
     df["Value"] = df["Close"] * df["Volume"]
+
     df["AvgValue20"] = df["Value"].rolling(20).mean()
+
     df["ValueRatio"] = df["Value"] / df["AvgValue20"]
 
     df["VWAP"] = (
-        df["Volume"] * (df["High"] + df["Low"] + df["Close"]) / 3
+        df["Volume"] *
+        (df["High"] + df["Low"] + df["Close"]) / 3
     ).cumsum() / df["Volume"].cumsum()
 
     return df.dropna()
@@ -367,9 +384,10 @@ def run_screener(data):
 
         probability = (score_pct * 0.3) + (winrate * 0.7)
 
+        latest = df.sort_index().tail(1)
         results.append({
             "Ticker": ticker,
-            "Price": df["Close"].iloc[-1],
+            "Price": float(latest["Close"].values[0]),
             "Warning": warning,
             "Score (%)": round(score_pct,2),
             "Winrate (%)": winrate,

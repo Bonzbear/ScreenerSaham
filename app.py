@@ -81,24 +81,11 @@ def load_csv_today(file):
     df = df[df["Code"] != "Code"]
 
     # =========================
-    # RENAME SESUAI POSISI ASLI
+    # HAPUS KOLOM TIDAK PERLU
     # =========================
-    df.columns = [
-        "NO",
-        "Code",
-        "Last",
-        "Symbol",
-        "Change",
-        "Change_pct",
-        "Prev",
-        "Open",
-        "High",
-        "Low",
-        "Value_M",
-        "Volume",
-        "Freq",
-        "Extra"
-    ]
+    drop_cols = [col for col in df.columns if "Unnamed" in col]
+
+    df = df.drop(columns=drop_cols)
 
     # =========================
     # CLEAN
@@ -124,12 +111,13 @@ def load_csv_today(file):
         "Open",
         "High",
         "Low",
-        "Value_M",
+        "Value(M)",
         "Volume",
         "Freq"
     ]
 
     for col in num_cols:
+
         df[col] = pd.to_numeric(
             df[col],
             errors="coerce"
@@ -141,15 +129,10 @@ def load_csv_today(file):
     df["Volume"] = df["Volume"] * 100
 
     # =========================
-    # TICKER
+    # FINAL
     # =========================
     df["Ticker"] = df["Code"] + ".JK"
     df["Close"] = df["Last"]
-
-    # =========================
-    # DROP INVALID
-    # =========================
-    df = df.dropna(subset=["Close"])
 
     return df[
         ["Ticker", "Open", "High", "Low", "Close", "Volume"]

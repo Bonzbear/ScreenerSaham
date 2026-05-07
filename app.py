@@ -161,53 +161,70 @@ def merge_today(data, df_today):
 
     today_date = pd.Timestamp.today().normalize()
 
-    for ticker in df_today["Ticker"].unique():
+    for _, row in df_today.iterrows():
+
+        ticker = row["Ticker"]
+
+        if ticker not in data:
+            continue
+
+        hist = data[ticker].copy()
+
+        if hist.empty:
+            continue
+
+        # =========================
+        # FIX DATE
+        # =========================
+        hist.index = pd.to_datetime(hist.index)
 
         try:
-
-            if ticker not in data:
-                continue
-
-            hist = data[ticker].copy()
-
-            if hist.empty:
-                continue
-
-            # =========================
-            # FIX INDEX
-            # =========================
-            hist.index = pd.to_datetime(hist.index)
             hist.index = hist.index.tz_localize(None)
-            hist.index = hist.index.normalize()
+        except:
+            pass
 
-            # =========================
-            # AMBIL DATA CSV
-            # =========================
-            row = df_today[
-                df_today["Ticker"] == ticker
-            ].iloc[0]
+        hist.index = hist.index.normalize()
 
-            # =========================
-            # BUAT ROW BARU
-            # =========================
-            hist.loc[today_date, "Open"] = float(row["Open"])
-            hist.loc[today_date, "High"] = float(row["High"])
-            hist.loc[today_date, "Low"] = float(row["Low"])
-            hist.loc[today_date, "Close"] = float(row["Close"])
-            hist.loc[today_date, "Adj Close"] = float(row["Close"])
-            hist.loc[today_date, "Volume"] = float(row["Volume"])
+        # =========================
+        # HAPUS ROW HARI INI
+        # =========================
+        hist = hist[hist.index != today_date]
 
-            # =========================
-            # SORT
-            # =========================
-            hist = hist.sort_index()
+        # =========================
+        # ROW BARU
+        # =========================
+        new_row = pd.DataFrame({
+            "Open": [float(row["Open"])],
+            "High": [float(row["High"])],
+            "Low": [float(row["Low"])],
+            "Close": [float(row["Close"])],
+            "Adj Close": [float(row["Close"])],
+            "Volume": [float(row["Volume"])]
+        }, index=[today_date])
 
-            combined[ticker] = hist
+        # =========================
+        # PASTIKAN INDEX SAMA TIPE
+        # =========================
+        new_row.index = pd.to_datetime(new_row.index)
 
-        except Exception as e:
-            st.write(ticker, e)
-    st.write("TODAY:", today_date)
-    st.write(hist.tail())
+        # =========================
+        # GABUNG
+        # =========================
+        hist = pd.concat([hist, new_row])
+
+        # =========================
+        # SORT
+        # =========================
+        hist = hist.sort_index()
+
+        # =========================
+        # DEBUG
+        # =========================
+        if ticker == "ASPR.JK":
+            st.write(hist.tail())
+
+        combined[ticker] = hist
+
     return combined
 
 

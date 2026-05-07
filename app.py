@@ -67,61 +67,21 @@ def load_csv_today(file):
 
     file.seek(0)
 
-    encodings = [
-        "utf-8",
-        "utf-8-sig",
-        "cp1252",
-        "latin1"
-    ]
-
-    df = None
-
-    for enc in encodings:
-
-        try:
-            file.seek(0)
-
-            df = pd.read_csv(
-                file,
-                dtype=str,
-                encoding=enc,
-                keep_default_na=False,
-                engine="python",
-                on_bad_lines="skip"
-            )
-
-            break
-
-        except:
-            continue
-
-    if df is None:
-        raise Exception("CSV gagal dibaca")
+    df = pd.read_csv(
+        file,
+        dtype=str,
+        encoding="latin1",
+        engine="python",
+        keep_default_na=False
+    )
 
     # =========================
-    # DEBUG
+    # HAPUS HEADER DOBEL
     # =========================
-    st.write("Jumlah kolom:", len(df.columns))
-    st.write(df.columns)
+    df = df[df["Code"] != "Code"]
 
     # =========================
-    # HAPUS UNNAMED
-    # =========================
-    df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
-
-    # =========================
-    # AMBIL MAKSIMAL 13 KOLOM
-    # =========================
-    df = df.iloc[:, :13].copy()
-
-    # =========================
-    # JIKA KOLOM KURANG
-    # =========================
-    while len(df.columns) < 13:
-        df[f"extra_{len(df.columns)}"] = ""
-
-    # =========================
-    # RENAME
+    # RENAME SESUAI POSISI ASLI
     # =========================
     df.columns = [
         "NO",
@@ -136,16 +96,12 @@ def load_csv_today(file):
         "Low",
         "Value_M",
         "Volume",
-        "Freq"
+        "Freq",
+        "Extra"
     ]
 
     # =========================
-    # HAPUS HEADER DOBEL
-    # =========================
-    df = df[df["Code"] != "Code"]
-
-    # =========================
-    # CLEAN STRING
+    # CLEAN
     # =========================
     for col in df.columns:
 
@@ -153,10 +109,10 @@ def load_csv_today(file):
             df[col]
             .astype(str)
             .str.strip()
+            .str.replace(",", "", regex=False)
+            .str.replace("¡ã", "", regex=False)
+            .str.replace("¡è", "", regex=False)
             .str.replace('"', '', regex=False)
-            .str.replace("��", "", regex=False)
-            .str.replace("~", "", regex=False)
-            .str.replace("∟", "", regex=False)
         )
 
     # =========================
@@ -174,19 +130,13 @@ def load_csv_today(file):
     ]
 
     for col in num_cols:
-
-        df[col] = (
-            df[col]
-            .str.replace(",", "", regex=False)
-        )
-
         df[col] = pd.to_numeric(
             df[col],
             errors="coerce"
         )
 
     # =========================
-    # VOLUME
+    # VOLUME LOT -> SHARE
     # =========================
     df["Volume"] = df["Volume"] * 100
 
@@ -199,7 +149,7 @@ def load_csv_today(file):
     # =========================
     # DROP INVALID
     # =========================
-    df = df.dropna(subset=["Ticker", "Close"])
+    df = df.dropna(subset=["Close"])
 
     return df[
         ["Ticker", "Open", "High", "Low", "Close", "Volume"]

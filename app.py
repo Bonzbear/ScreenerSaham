@@ -234,14 +234,16 @@ def merge_today(data, df_today):
 def prepare_data(df):
 
     # =========================
-    # SORT DATE
+    # SORT
     # =========================
     df = df.sort_index()
 
     # =========================
-    # HAPUS DUPLICATE DATE
+    # HAPUS CANDLE LIBUR
     # =========================
-    df = df[~df.index.duplicated(keep="last")]
+    df = df.dropna(
+        subset=["Open", "High", "Low", "Close", "Volume"]
+    )
 
     # =========================
     # INDICATOR
@@ -249,21 +251,45 @@ def prepare_data(df):
     df["SMA5"] = df["Close"].rolling(5).mean()
 
     df["VOLMA20"] = df["Volume"].rolling(20).mean()
+
     df["VOLMA5"] = df["Volume"].rolling(5).mean()
 
     df["Value"] = df["Close"] * df["Volume"]
 
-    df["AvgValue20"] = df["Value"].rolling(20).mean()
+    df["AvgValue20"] = (
+        df["Value"].rolling(20).mean()
+    )
 
-    df["ValueRatio"] = df["Value"] / df["AvgValue20"]
+    df["ValueRatio"] = (
+        df["Value"] / df["AvgValue20"]
+    )
+
+    typical = (
+        df["High"] +
+        df["Low"] +
+        df["Close"]
+    ) / 3
 
     df["VWAP"] = (
-        df["Volume"] *
-        (df["High"] + df["Low"] + df["Close"]) / 3
-    ).cumsum() / df["Volume"].cumsum()
+        (typical * df["Volume"]).cumsum()
+        /
+        df["Volume"].cumsum()
+    )
 
-    return df.dropna()
+    # =========================
+    # DROP INDIKATOR
+    # =========================
+    df = df.dropna(
+        subset=[
+            "SMA5",
+            "VOLMA20",
+            "VOLMA5",
+            "AvgValue20",
+            "VWAP"
+        ]
+    )
 
+    return df
 
 # =========================
 # ARA

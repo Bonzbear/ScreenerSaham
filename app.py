@@ -142,11 +142,13 @@ def load_csv_today(file):
 # =========================
 @st.cache_data(ttl=600)
 def get_data(tickers):
+
     return yf.download(
         tickers=" ".join(tickers),
         period="5y",
         group_by="ticker",
-        progress=False
+        progress=False,
+        auto_adjust=False
     )
 
 
@@ -190,7 +192,9 @@ def merge_today(data, df_today):
             hist = pd.concat([hist, new_row])
 
         combined[ticker] = hist
-
+        if ticker == "ASPR.JK":
+            st.write(hist.tail())
+            st.write(row)
     return combined
 
 

@@ -67,12 +67,35 @@ def load_csv_today(file):
 
     file.seek(0)
 
-    df = pd.read_csv(
-        file,
-        dtype=str,
-        encoding="utf-8-sig",
-        keep_default_na=False
-    )
+    encodings = [
+        "utf-8",
+        "utf-8-sig",
+        "cp1252",
+        "latin1"
+    ]
+
+    df = None
+
+    for enc in encodings:
+
+        try:
+            file.seek(0)
+
+            df = pd.read_csv(
+                file,
+                dtype=str,
+                encoding=enc,
+                keep_default_na=False,
+                engine="python"
+            )
+
+            break
+
+        except:
+            continue
+
+    if df is None:
+        raise Exception("CSV tidak bisa dibaca")
 
     # =========================
     # HAPUS KOLOM KOSONG
@@ -82,7 +105,8 @@ def load_csv_today(file):
     # =========================
     # HAPUS HEADER DOBEL
     # =========================
-    df = df[df["Code"] != "Code"]
+    if "Code" in df.columns:
+        df = df[df["Code"] != "Code"]
 
     # =========================
     # RESET INDEX
@@ -90,7 +114,12 @@ def load_csv_today(file):
     df = df.reset_index(drop=True)
 
     # =========================
-    # RENAME MANUAL
+    # AMBIL 13 KOLOM PERTAMA
+    # =========================
+    df = df.iloc[:, :13]
+
+    # =========================
+    # RENAME
     # =========================
     df.columns = [
         "NO",
@@ -109,7 +138,7 @@ def load_csv_today(file):
     ]
 
     # =========================
-    # BERSIHKAN STRING
+    # CLEAN STRING
     # =========================
     for col in df.columns:
 
@@ -144,10 +173,13 @@ def load_csv_today(file):
             .str.replace(",", "", regex=False)
         )
 
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+        df[col] = pd.to_numeric(
+            df[col],
+            errors="coerce"
+        )
 
     # =========================
-    # VOLUME LOT -> SHARE
+    # VOLUME
     # =========================
     df["Volume"] = df["Volume"] * 100
 
@@ -158,7 +190,7 @@ def load_csv_today(file):
     df["Close"] = df["Last"]
 
     # =========================
-    # HAPUS DATA INVALID
+    # DROP INVALID
     # =========================
     df = df.dropna(subset=["Ticker", "Close"])
 

@@ -220,8 +220,6 @@ def merge_today(data, df_today):
         # =========================
         # DEBUG
         # =========================
-        if ticker == "ASPR.JK":
-            st.write(hist.tail())
 
         combined[ticker] = hist
 

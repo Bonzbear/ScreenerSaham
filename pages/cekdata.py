@@ -67,51 +67,88 @@ def load_csv_today(file):
 
     file.seek(0)
 
-    try:
-        df = pd.read_csv(file, encoding="utf-8")
-    except:
-        file.seek(0)
-        df = pd.read_csv(file, encoding="latin-1")
+    df = pd.read_csv(
+        file,
+        dtype=str,
+        encoding="latin1",
+        engine="python",
+        keep_default_na=False
+    )
 
-    df = df[df.iloc[:,1] != "Code"]
+    # =========================
+    # HAPUS HEADER DOBEL
+    # =========================
+    df = df[df["Code"] != "Code"]
 
-    df = df.iloc[:, :13]
+    # =========================
+    # HAPUS KOLOM TIDAK PERLU
+    # =========================
+    drop_cols = [col for col in df.columns if "Unnamed" in col]
 
-    df.columns = [
-        "NO","Code","Last","Symbol","Change","Change_pct",
-        "Prev","Open","High","Low","Value_M","Volume","Freq"
-    ]
+    df = df.drop(columns=drop_cols)
 
-    num_cols = ["Last","Prev","Open","High","Low","Value_M","Volume"]
+    # =========================
+    # CLEAN
+    # =========================
+    for col in df.columns:
 
-    for col in num_cols:
         df[col] = (
             df[col]
             .astype(str)
-            .str.replace(",", "")
-            .str.replace("~", "")
-            .str.replace("∟", "")
+            .str.strip()
+            .str.replace(",", "", regex=False)
+            .str.replace("¡ã", "", regex=False)
+            .str.replace("¡è", "", regex=False)
+            .str.replace('"', '', regex=False)
         )
-        df[col] = pd.to_numeric(df[col], errors="coerce")
 
+    # =========================
+    # NUMERIC
+    # =========================
+    num_cols = [
+        "Last",
+        "Prev",
+        "Open",
+        "High",
+        "Low",
+        "Value(M)",
+        "Volume",
+        "Freq"
+    ]
+
+    for col in num_cols:
+
+        df[col] = pd.to_numeric(
+            df[col],
+            errors="coerce"
+        )
+
+    # =========================
+    # VOLUME LOT -> SHARE
+    # =========================
     df["Volume"] = df["Volume"] * 100
 
+    # =========================
+    # FINAL
+    # =========================
     df["Ticker"] = df["Code"] + ".JK"
     df["Close"] = df["Last"]
 
-    return df[["Ticker","Open","High","Low","Close","Volume"]]
-
-
+    return df[
+        ["Ticker", "Open", "High", "Low", "Close", "Volume"]
+    ]
 # =========================
 # YAHOO
 # =========================
 @st.cache_data(ttl=600)
 def get_data(tickers):
+
     return yf.download(
         tickers=" ".join(tickers),
         period="5y",
         group_by="ticker",
-        progress=False
+        progress=False,
+        auto_adjust=False
     )
 
 
@@ -121,10 +158,12 @@ def get_data(tickers):
 def merge_today(data, df_today):
 
     combined = {}
-    indonesia_tz = pytz.timezone("Asia/Jakarta")
-    today_date = pd.Timestamp(datetime.datetime.now(indonesia_tz).date())
 
-    for ticker in df_today["Ticker"].unique():
+    today_date = pd.Timestamp.today().normalize()
+
+    for _, row in df_today.iterrows():
+
+        ticker = row["Ticker"]
 
         if ticker not in data:
             continue
@@ -134,25 +173,53 @@ def merge_today(data, df_today):
         if hist.empty:
             continue
 
+        # =========================
+        # FIX DATE
+        # =========================
         hist.index = pd.to_datetime(hist.index)
 
-        row = df_today[df_today["Ticker"] == ticker].iloc[0]
+        try:
+            hist.index = hist.index.tz_localize(None)
+        except:
+            pass
 
-        last_date = hist.index.max()
+        hist.index = hist.index.normalize()
 
-        new_values = {
-            "Open": row["Open"],
-            "High": row["High"],
-            "Low": row["Low"],
-            "Close": row["Close"],
-            "Volume": row["Volume"]
-        }
+        # =========================
+        # HAPUS ROW HARI INI
+        # =========================
+        hist = hist[hist.index != today_date]
 
-        if last_date == today_date:
-            hist.loc[last_date, ["Open","High","Low","Close","Volume"]] = list(new_values.values())
-        else:
-            new_row = pd.DataFrame([new_values], index=[today_date])
-            hist = pd.concat([hist, new_row])
+        # =========================
+        # ROW BARU
+        # =========================
+        new_row = pd.DataFrame({
+            "Open": [float(row["Open"])],
+            "High": [float(row["High"])],
+            "Low": [float(row["Low"])],
+            "Close": [float(row["Close"])],
+            "Adj Close": [float(row["Close"])],
+            "Volume": [float(row["Volume"])]
+        }, index=[today_date])
+
+        # =========================
+        # PASTIKAN INDEX SAMA TIPE
+        # =========================
+        new_row.index = pd.to_datetime(new_row.index)
+
+        # =========================
+        # GABUNG
+        # =========================
+        hist = pd.concat([hist, new_row])
+
+        # =========================
+        # SORT
+        # =========================
+        hist = hist.sort_index()
+
+        # =========================
+        # DEBUG
+        # =========================
 
         combined[ticker] = hist
 
@@ -164,20 +231,63 @@ def merge_today(data, df_today):
 # =========================
 def prepare_data(df):
 
+    # =========================
+    # SORT
+    # =========================
+    df = df.sort_index()
+
+    # =========================
+    # HAPUS CANDLE LIBUR
+    # =========================
+    df = df.dropna(
+        subset=["Open", "High", "Low", "Close", "Volume"]
+    )
+
+    # =========================
+    # INDICATOR
+    # =========================
     df["SMA5"] = df["Close"].rolling(5).mean()
+
     df["VOLMA20"] = df["Volume"].rolling(20).mean()
+
     df["VOLMA5"] = df["Volume"].rolling(5).mean()
 
     df["Value"] = df["Close"] * df["Volume"]
-    df["AvgValue20"] = df["Value"].rolling(20).mean()
-    df["ValueRatio"] = df["Value"] / df["AvgValue20"]
+
+    df["AvgValue20"] = (
+        df["Value"].rolling(20).mean()
+    )
+
+    df["ValueRatio"] = (
+        df["Value"] / df["AvgValue20"]
+    )
+
+    typical = (
+        df["High"] +
+        df["Low"] +
+        df["Close"]
+    ) / 3
 
     df["VWAP"] = (
-        df["Volume"] * (df["High"] + df["Low"] + df["Close"]) / 3
-    ).cumsum() / df["Volume"].cumsum()
+        (typical * df["Volume"]).cumsum()
+        /
+        df["Volume"].cumsum()
+    )
 
-    return df.dropna()
+    # =========================
+    # DROP INDIKATOR
+    # =========================
+    df = df.dropna(
+        subset=[
+            "SMA5",
+            "VOLMA20",
+            "VOLMA5",
+            "AvgValue20",
+            "VWAP"
+        ]
+    )
 
+    return df
 
 # =========================
 # ARA
@@ -230,8 +340,8 @@ def is_signal(df, i):
         volume > prev_volume and
         prev_close < close and
         close > sma5 and
-        value > 10_000_000_000 and
-        value_ratio > 2
+        value > 10_000_000_000
+        #value_ratio > 2
     ):
         return False
 
@@ -328,9 +438,12 @@ def run_screener(data):
 
         probability = (score_pct * 0.3) + (winrate * 0.7)
 
+        latest = df.sort_index().tail(1)
+        if ticker == "ASPR.JK":
+            st.write(df.tail(10))
         results.append({
             "Ticker": ticker,
-            "Price": df["Close"].iloc[-1],
+            "Price": float(latest["Close"].values[0]),
             "Warning": warning,
             "Score (%)": round(score_pct,2),
             "Winrate (%)": winrate,

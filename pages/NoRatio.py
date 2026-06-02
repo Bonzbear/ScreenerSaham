@@ -242,7 +242,8 @@ def prepare_data(df):
     df = df.dropna(
         subset=["Open", "High", "Low", "Close", "Volume"]
     )
-
+    # HAPUS CANDLE LIBUR / FAKE YAHOO
+    df = df[df["Volume"] > 0]
     # =========================
     # INDICATOR
     # =========================

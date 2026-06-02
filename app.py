@@ -440,10 +440,7 @@ def run_screener(data):
         probability = (score_pct * 0.3) + (winrate * 0.7)
 
         latest = df.sort_index().tail(1)
-        latest_5 = df["Close"].tail(5)
-        st.write(latest_5)
 
-        st.write("SMA5:", latest_5.mean())
         results.append({
             "Ticker": ticker,
             "Price": float(latest["Close"].values[0]),

@@ -443,6 +443,7 @@ def run_screener(data):
         results.append({
             "Ticker": ticker,
             "Price": float(latest["Close"].values[0]),
+            "SMA5": round(float(latest["SMA5"].values[0]), 2),
             "Warning": warning,
             "Score (%)": round(score_pct,2),
             "Winrate (%)": winrate,

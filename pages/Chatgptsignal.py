@@ -249,6 +249,8 @@ def prepare_data(df):
     # =========================
     df["SMA5"] = df["Close"].rolling(5).mean()
 
+    df["SMA20"] = df["Close"].rolling(20).mean()
+
     df["VOLMA20"] = df["Volume"].rolling(20).mean()
 
     df["VOLMA5"] = df["Volume"].rolling(5).mean()

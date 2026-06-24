@@ -174,18 +174,21 @@ def get_data_15m(ticker):
 
 def get_intraday_sl(df15):
 
-    lows = df15["Low"]
+    if df15 is None or df15.empty:
+        return None
+
+    lows = df15["Low"].astype(float).values  # <-- PENTING: paksa jadi numpy array
 
     swing = []
 
-    for i in range(1, len(df15)-1):
+    for i in range(1, len(lows)-1):
 
         if (
-            lows.iloc[i] < lows.iloc[i-1]
+            lows[i] < lows[i-1]
             and
-            lows.iloc[i] < lows.iloc[i+1]
+            lows[i] < lows[i+1]
         ):
-            swing.append(lows.iloc[i])
+            swing.append(lows[i])
 
     if len(swing) == 0:
         return None

@@ -504,7 +504,7 @@ def run_screener(data):
         probability = (score_pct * 0.3) + (winrate * 0.7)
 
         latest = df.sort_index().tail(1)
-       entry = float(latest["Close"].values[0])
+        entry = float(latest["Close"].values[0])
 
         df15 = get_data_15m(ticker)
 

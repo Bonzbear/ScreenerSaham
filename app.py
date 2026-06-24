@@ -150,7 +150,47 @@ def get_data(tickers):
         progress=False,
         auto_adjust=False
     )
+# =========================
+# DATA 15 MENIT
+# =========================
+@st.cache_data(ttl=300)
+def get_data_15m(ticker):
 
+    df = yf.download(
+        ticker,
+        period="5d",
+        interval="15m",
+        progress=False,
+        auto_adjust=False
+    )
+
+    if df.empty:
+        return None
+
+    df = df.dropna()
+
+    return df
+
+
+def get_intraday_sl(df15):
+
+    lows = df15["Low"]
+
+    swing = []
+
+    for i in range(1, len(df15)-1):
+
+        if (
+            lows.iloc[i] < lows.iloc[i-1]
+            and
+            lows.iloc[i] < lows.iloc[i+1]
+        ):
+            swing.append(lows.iloc[i])
+
+    if len(swing) == 0:
+        return None
+
+    return max(swing)
 
 # =========================
 # MERGE
@@ -348,7 +388,31 @@ def is_signal(df, i):
 
     return True
 
+def get_stoploss(df):
 
+    low = df["Low"]
+
+    swing_lows = []
+
+    # cari swing low 20 candle terakhir
+    for i in range(len(df)-20, len(df)-1):
+
+        if i <= 0 or i >= len(df)-1:
+            continue
+
+        if (
+            low.iloc[i] < low.iloc[i-1]
+            and
+            low.iloc[i] < low.iloc[i+1]
+        ):
+
+            swing_lows.append(low.iloc[i])
+
+    if len(swing_lows) == 0:
+        return None
+
+    # support terdekat
+    return max(swing_lows)
 # =========================
 # SCORE
 # =========================
@@ -440,7 +504,20 @@ def run_screener(data):
         probability = (score_pct * 0.3) + (winrate * 0.7)
 
         latest = df.sort_index().tail(1)
+       entry = float(latest["Close"].values[0])
 
+        df15 = get_data_15m(ticker)
+
+        sl = None
+        risk = None
+
+        if df15 is not None:
+
+            sl = get_intraday_sl(df15)
+
+            if sl is not None:
+
+                risk = ((entry - sl) / entry) * 100
         results.append({
             "Ticker": ticker,
             "Price": float(latest["Close"].values[0]),
@@ -449,6 +526,7 @@ def run_screener(data):
             "Score (%)": round(score_pct,2),
             "Winrate (%)": winrate,
             "Probability (%)": round(probability,2),
+            "SL": round(sl,2) if sl else None,
             "EV (%)": ev
         })
 

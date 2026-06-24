@@ -177,7 +177,7 @@ def get_intraday_sl(df15):
     if df15 is None or df15.empty:
         return None
 
-    lows = df15["Low"].astype(float).values  # <-- PENTING: paksa jadi numpy array
+    lows = df15["Low"].astype(float).values
 
     swing = []
 
@@ -193,8 +193,13 @@ def get_intraday_sl(df15):
     if len(swing) == 0:
         return None
 
-    return max(swing)
+    sl = max(swing)
 
+    # 🔥 penting: sanitasi nilai
+    if np.isnan(sl):
+        return None
+
+    return float(sl)
 # =========================
 # MERGE
 # =========================
@@ -529,7 +534,7 @@ def run_screener(data):
             "Score (%)": round(score_pct,2),
             "Winrate (%)": winrate,
             "Probability (%)": round(probability,2),
-            "SL": round(sl, 2) if sl is not None else None,
+            "SL": round(float(sl), 2) if sl is not None and not np.isnan(sl) else None,
             "EV (%)": ev
         })
 

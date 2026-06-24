@@ -177,7 +177,8 @@ def get_intraday_sl(df15):
     if df15 is None or df15.empty:
         return None
 
-    lows = df15["Low"].astype(float).values
+    # paksa jadi 1D array float bersih
+    lows = df15["Low"].to_numpy(dtype=float)
 
     swing = []
 
@@ -188,18 +189,23 @@ def get_intraday_sl(df15):
             and
             lows[i] < lows[i+1]
         ):
-            swing.append(lows[i])
+            swing.append(float(lows[i]))  # 🔥 paksa float di sini
 
     if len(swing) == 0:
         return None
 
     sl = max(swing)
 
-    # 🔥 penting: sanitasi nilai
+    # safety check terakhir
+    try:
+        sl = float(sl)
+    except:
+        return None
+
     if np.isnan(sl):
         return None
 
-    return float(sl)
+    return sl
 # =========================
 # MERGE
 # =========================

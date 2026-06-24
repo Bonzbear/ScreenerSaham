@@ -529,7 +529,7 @@ def run_screener(data):
             "Score (%)": round(score_pct,2),
             "Winrate (%)": winrate,
             "Probability (%)": round(probability,2),
-            "SL": round(sl,2) if sl else None,
+            "SL": round(sl, 2) if sl is not None else None,
             "EV (%)": ev
         })
 

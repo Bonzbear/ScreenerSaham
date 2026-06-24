@@ -150,62 +150,8 @@ def get_data(tickers):
         progress=False,
         auto_adjust=False
     )
-# =========================
-# DATA 15 MENIT
-# =========================
-@st.cache_data(ttl=300)
-def get_data_15m(ticker):
-
-    df = yf.download(
-        ticker,
-        period="5d",
-        interval="15m",
-        progress=False,
-        auto_adjust=False
-    )
-
-    if df.empty:
-        return None
-
-    df = df.dropna()
-
-    return df
 
 
-def get_intraday_sl(df15):
-
-    if df15 is None or df15.empty:
-        return None
-
-    # paksa jadi 1D array float bersih
-    lows = df15["Low"].to_numpy(dtype=float)
-
-    swing = []
-
-    for i in range(1, len(lows)-1):
-
-        if (
-            lows[i] < lows[i-1]
-            and
-            lows[i] < lows[i+1]
-        ):
-            swing.append(float(lows[i]))  # 🔥 paksa float di sini
-
-    if len(swing) == 0:
-        return None
-
-    sl = max(swing)
-
-    # safety check terakhir
-    try:
-        sl = float(sl)
-    except:
-        return None
-
-    if np.isnan(sl):
-        return None
-
-    return sl
 # =========================
 # MERGE
 # =========================
@@ -395,38 +341,14 @@ def is_signal(df, i):
         volume > prev_volume and
         prev_close < close and
         close > sma5 and
-        value > 10_000_000_000
-        # value_ratio > 2
+        value > 10_000_000_000 and
+        value_ratio > 2
     ):
         return False
 
     return True
 
-def get_stoploss(df):
 
-    low = df["Low"]
-
-    swing_lows = []
-
-    # cari swing low 20 candle terakhir
-    for i in range(len(df)-20, len(df)-1):
-
-        if i <= 0 or i >= len(df)-1:
-            continue
-
-        if (
-            low.iloc[i] < low.iloc[i-1]
-            and
-            low.iloc[i] < low.iloc[i+1]
-        ):
-
-            swing_lows.append(low.iloc[i])
-
-    if len(swing_lows) == 0:
-        return None
-
-    # support terdekat
-    return max(swing_lows)
 # =========================
 # SCORE
 # =========================
@@ -518,20 +440,7 @@ def run_screener(data):
         probability = (score_pct * 0.3) + (winrate * 0.7)
 
         latest = df.sort_index().tail(1)
-        entry = float(latest["Close"].values[0])
-
-        df15 = get_data_15m(ticker)
-
-        sl = None
-        risk = None
-
-        if df15 is not None:
-
-            sl = get_intraday_sl(df15)
-
-            if sl is not None:
-
-                risk = ((entry - sl) / entry) * 100
+       
         results.append({
             "Ticker": ticker,
             "Price": float(latest["Close"].values[0]),
@@ -540,7 +449,6 @@ def run_screener(data):
             "Score (%)": round(score_pct,2),
             "Winrate (%)": winrate,
             "Probability (%)": round(probability,2),
-            "SL": round(float(sl), 2) if sl is not None and not np.isnan(sl) else None,
             "EV (%)": ev
         })
 

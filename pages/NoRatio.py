@@ -310,7 +310,7 @@ def is_signal(df, i):
 
     today = df.iloc[i]
     prev = df.iloc[i-1]
-
+    open = today["Open"]
     close = today["Close"]
     volume = today["Volume"]
 
@@ -338,6 +338,7 @@ def is_signal(df, i):
         return False
 
     if not (
+        open < close
         volume > prev_volume and
         prev_close < close and
         close > sma5 and

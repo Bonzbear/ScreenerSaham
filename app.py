@@ -310,7 +310,7 @@ def is_signal(df, i):
 
     today = df.iloc[i]
     prev = df.iloc[i-1]
-
+    open = today["Open"]
     close = today["Close"]
     volume = today["Volume"]
 

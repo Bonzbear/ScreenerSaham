@@ -338,7 +338,7 @@ def is_signal(df, i):
         return False
 
     if not (
-        open < close
+        open < close and
         volume > prev_volume and
         prev_close < close and
         close > sma5 and

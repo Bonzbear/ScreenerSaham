@@ -12,7 +12,7 @@ import numpy as np
 TOKEN = "8639573881:AAHQfo4YEqjFVMMurZD4-gS416UrMbukGsE"
 CHAT_ID = "-1003724967633"
 
-MAX_SCORE = 1000
+MAX_SCORE = 500
 
 # =========================
 # TELEGRAM

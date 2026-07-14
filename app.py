@@ -339,6 +339,10 @@ def is_signal(df, i):
 
     if not (
         open < close and
+        today["Volume"] > today["VOLMA20"] and
+        today["Close"] > today["VWAP"] and
+        today["Low"] > prev["Low"] and
+        today["High"] > prev["High"] and
         volume > prev_volume and
         prev_close < close and
         close > sma5 and
@@ -367,12 +371,12 @@ def calculate_score(df):
     warning = ""
 
     if prev["Close"] < prev["SMA5"]: score += 125
-    if today["Volume"] > today["VOLMA20"]: score += 125
+    #if today["Volume"] > today["VOLMA20"]: score += 125
     if today["Volume"] > today["VOLMA5"]: score += 125
-    if today["Low"] > prev["Low"]: score += 125
-    if today["High"] > prev["High"]: score += 125
+    #if today["Low"] > prev["Low"]: score += 125
+   # if today["High"] > prev["High"]: score += 125
     if (open_ - low) > (high - close): score += 125
-    if today["Close"] > today["VWAP"]: score += 125
+    #if today["Close"] > today["VWAP"]: score += 125
     if prev["Close"] < prev["VWAP"]: score += 125
 
     body = abs(close - open_)

@@ -439,7 +439,15 @@ def run_screener(data):
         score, warning = calculate_score(df)
         score_pct = (score / MAX_SCORE) * 100
 
-        winrate, ev = backtest_ev(df)
+        # --- PERUBAHAN 1: Tangkap 3 nilai dari backtest_ev ---
+        winrate, ev, total_trades = backtest_ev(df)
+
+        # --- PERUBAHAN 2: Validasi sampel minimum ---
+        # Jika historis kemunculan sinyal kurang dari 5 kali, winrate dianggap netral (50%)
+        if total_trades < 5:
+            valid_winrate = 50.0 
+        else:
+            valid_winrate = winrate
 
         probability = (score_pct * 0.3) + (winrate * 0.7)
 

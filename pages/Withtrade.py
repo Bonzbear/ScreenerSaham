@@ -459,7 +459,8 @@ def run_screener(data):
             "SMA5": round(float(latest["SMA5"].values[0]), 2),
             "Warning": warning,
             "Score (%)": round(score_pct,2),
-            "Winrate (%)": winrate,
+            "Winrate (%)": winrate, # Tetap tampilkan winrate asli untuk referensi
+            "Trades": total_trades, # --- PERUBAHAN 3: Tambahkan kolom jumlah trade ---
             "Probability (%)": round(probability,2),
             "EV (%)": ev
         })

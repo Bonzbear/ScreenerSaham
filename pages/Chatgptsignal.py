@@ -383,13 +383,14 @@ def calculate_score(df):
         if closing_range >= 0.80: 
             score += 100
 
+    if "SMA20" in today and pd.notna(today["SMA20"]):
     # --- 4. TREND & RISK/REWARD (Tambahan Baru) ---
     # Poin plus jika trend menengah (MA20) sedang menanjak
-    if today["SMA20"] > prev["SMA20"]: score += 100
+        if today["SMA20"] > prev["SMA20"]: score += 100
     
     # Poin plus jika posisi beli dekat dengan garis Support MA20 (Jarak < 5%)
-    jarak_ma20 = (close - today["SMA20"]) / today["SMA20"]
-    if 0 < jarak_ma20 <= 0.05: score += 100 
+        jarak_ma20 = (close - today["SMA20"]) / today["SMA20"]
+        if 0 < jarak_ma20 <= 0.05: score += 100 
 
     # --- 5. PENALTI & WARNING (Milik Anda) ---
     body = abs(close - open_)
@@ -477,7 +478,7 @@ def run_screener(data):
             "Price": float(latest["Close"].values[0]),
             "SMA5": round(float(latest["SMA5"].values[0]), 2),
             "Warning": warning,
-            "Score (%)": round(score_pct, 2),
+            "Score (%)": round(score_pct,2),
             "Winrate (%)": winrate, # Tetap tampilkan winrate asli untuk referensi
             "Trades": total_trades, # --- PERUBAHAN 3: Tambahkan kolom jumlah trade ---
             "Probability (%)": round(probability, 2),

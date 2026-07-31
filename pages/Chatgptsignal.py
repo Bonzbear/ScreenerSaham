@@ -12,7 +12,7 @@ import numpy as np
 TOKEN = "8639573881:AAHQfo4YEqjFVMMurZD4-gS416UrMbukGsE"
 CHAT_ID = "-1003724967633"
 
-MAX_SCORE = 1000
+MAX_SCORE = 650
 
 # =========================
 # TELEGRAM
@@ -249,8 +249,6 @@ def prepare_data(df):
     # =========================
     df["SMA5"] = df["Close"].rolling(5).mean()
 
-    df["SMA20"] = df["Close"].rolling(20).mean()
-
     df["VOLMA20"] = df["Volume"].rolling(20).mean()
 
     df["VOLMA5"] = df["Volume"].rolling(5).mean()
@@ -312,93 +310,42 @@ def is_signal(df, i):
 
     today = df.iloc[i]
     prev = df.iloc[i-1]
-
+    open = today["Open"]
     close = today["Close"]
-    high = today["High"]
     volume = today["Volume"]
 
     prev_close = prev["Close"]
-    prev_high = prev["High"]
     prev_volume = prev["Volume"]
 
     sma5 = today["SMA5"]
-    sma20 = today["SMA20"]
-
     value = today["Value"]
     avg_value = today["AvgValue20"]
-
     value_ratio = today["ValueRatio"]
-
     avg_volume = today["VOLMA20"]
 
     change_pct = (close - prev_close) / prev_close
-
     ara = get_ara_limit(prev_close)
-
-    # =========================
-    # FILTER HARGA
-    # =========================
 
     if close > 6500 or close < 50:
         return False
 
-    # =========================
-    # HINDARI SAHAM SUDAH TERLALU NAIK
-    # =========================
-
     if ara == 0.25 and change_pct >= 0.24:
         return False
-
     if ara == 0.35 and change_pct >= 0.33:
         return False
 
-    # hindari candle terlalu tinggi
-    if change_pct > 0.06:
+    if not (avg_value > 10_000_000_000 and avg_volume > 1_000_000):
         return False
-
-    # minimal ada momentum
-    if change_pct < 0.01:
-        return False
-
-    # =========================
-    # LIQUIDITY FILTER
-    # =========================
 
     if not (
-        avg_value > 10_000_000_000 and
-        avg_volume > 1_000_000
+        open < close and                       # Tetap dipertahankan: Memastikan candle hari ini hijau (pembeli dominan)
+        today["Volume"] > today["VOLMA20"] and # Tetap dipertahankan: Volume di atas rata-rata 20 hari
+        today["Close"] > today["VWAP"] and     # Tetap dipertahankan: Harga penutupan di atas harga rata-rata intraday
+        today["Close"] > prev["High"] and      # MODIFIKASI: Menggantikan syarat High/Low kemarin
+        close > sma5 and                       # Tetap dipertahankan: Konfirmasi uptrend jangka pendek
+        value > 10_000_000_000                 # Tetap dipertahankan: Filter likuiditas Rp 10 Miliar
     ):
-        return False
-
-    # =========================
-    # MAIN SIGNAL
-    # =========================
-
-    if not (
-
-        # close lebih tinggi dari kemarin
-        close > prev_close and
-
-        # trend pendek bullish
-        close > sma5 and
-        sma5 > sma20 and
-
-        # volume expansion
-        volume > avg_volume * 1.5 and
-
-        # transaksi hari ini besar
-        value > 15_000_000_000 and
-
-        # relative volume/value
-        value_ratio > 1.5 and
-
-        # breakout high kemarin
-        close > prev_high and
-
-        # close dekat high
-        close >= high * 0.98
-
-    ):
+    # Skip saham ini
         return False
 
     return True
@@ -408,7 +355,6 @@ def is_signal(df, i):
 # SCORE
 # =========================
 def calculate_score(df):
-
     today = df.iloc[-1]
     prev = df.iloc[-2]
 
@@ -416,24 +362,42 @@ def calculate_score(df):
     high = today["High"]
     low = today["Low"]
     close = today["Close"]
-
+    
     score = 0
     warning = ""
 
-    if prev["Close"] < prev["SMA5"]: score += 125
-    if today["Volume"] > today["VOLMA20"]: score += 125
-    if today["Volume"] > today["VOLMA5"]: score += 125
-    if today["Low"] > prev["Low"]: score += 125
-    if today["High"] > prev["High"]: score += 125
-    if (open_ - low) > (high - close): score += 125
-    if today["Close"] > today["VWAP"]: score += 125
-    if prev["Close"] < prev["VWAP"]: score += 125
+    # --- 1. REVERSAL & BREAKOUT (Milik Anda) ---
+    if prev["Close"] < prev["SMA5"]: score += 100
+    if prev["Close"] < prev["VWAP"]: score += 100
+    if (open_ - low) > (high - close): score += 50  # Demand > Supply intraday
 
+    # --- 2. MOMENTUM EKSTREM (Modifikasi) ---
+    # Memberi poin HANYA jika volume benar-benar meledak (> 1.5x rata-rata 5 hari)
+    if today["Volume"] > (today["VOLMA5"] * 1.5): score += 100
+
+    # --- 3. KEKUATAN PENUTUPAN (Tambahan Baru) ---
+    # Memastikan range hari itu ada untuk menghindari error division by zero
+    if high != low: 
+        closing_range = (close - low) / (high - low)
+        # Jika penutupan berada di 20% area paling pucuk
+        if closing_range >= 0.80: 
+            score += 100
+
+    # --- 4. TREND & RISK/REWARD (Tambahan Baru) ---
+    # Poin plus jika trend menengah (MA20) sedang menanjak
+    if today["SMA20"] > prev["SMA20"]: score += 100
+    
+    # Poin plus jika posisi beli dekat dengan garis Support MA20 (Jarak < 5%)
+    jarak_ma20 = (close - today["SMA20"]) / today["SMA20"]
+    if 0 < jarak_ma20 <= 0.05: score += 100 
+
+    # --- 5. PENALTI & WARNING (Milik Anda) ---
     body = abs(close - open_)
     upper_wick = high - max(close, open_)
 
+    # Penalti jika ekor atas terlalu panjang (Indikasi distribusi/guyuran)
     if body > 0 and upper_wick > body * 1.5:
-        score -= 100
+        score -= 150  # Penalti diperbesar agar probabilitas langsung anjlok
         warning = "⚠️"
 
     return score, warning
@@ -443,11 +407,9 @@ def calculate_score(df):
 # BACKTEST + EV
 # =========================
 def backtest_ev(df):
-
     returns = []
 
     for i in range(20, len(df)-1):
-
         if not is_signal(df, i):
             continue
 
@@ -458,27 +420,32 @@ def backtest_ev(df):
         high_next = next_day["High"]
 
         ret = (high_next - close_today) / close_today
-
         returns.append(ret)
 
-    if len(returns) == 0:
-        return 0, 0
+    # 1. Hitung total trade (jumlah sampel)
+    total_trades = len(returns)
 
-    winrate = sum(1 for r in returns if r >= 0.015) / len(returns)
-    ev = sum(returns) / len(returns)
+    # 2. Kembalikan 0 untuk ketiga nilai jika tidak ada trade
+    if total_trades == 0:
+        return 0, 0, 0
 
-    return round(winrate * 100, 2), round(ev * 100, 2)
+    # Menggunakan variabel total_trades agar kode lebih rapi
+    winrate = sum(1 for r in returns if r >= 0.015) / total_trades
+    ev = sum(returns) / total_trades
+
+    # 3. Tambahkan total_trades di hasil akhir
+    return round(winrate * 100, 2), round(ev * 100, 2), total_trades
 
 
 # =========================
 # SCREENER
 # =========================
 def run_screener(data):
-
     results = []
+    
+    # Pastikan variabel MAX_SCORE sudah didefinisikan sebelumnya (misal: MAX_SCORE = 650)
 
     for ticker, df in data.items():
-
         df = prepare_data(df)
 
         if len(df) < 30:
@@ -490,30 +457,41 @@ def run_screener(data):
         score, warning = calculate_score(df)
         score_pct = (score / MAX_SCORE) * 100
 
-        winrate, ev = backtest_ev(df)
+        # --- PERUBAHAN 1: Tangkap 3 nilai dari backtest_ev ---
+        winrate, ev, total_trades = backtest_ev(df)
 
-        probability = (score_pct * 0.3) + (winrate * 0.7)
+        # --- PERUBAHAN 2: Validasi sampel minimum ---
+        # Jika historis kemunculan sinyal kurang dari 5 kali, winrate dianggap netral (50%)
+        if total_trades < 5:
+            valid_winrate = 50.0 
+        else:
+            valid_winrate = winrate
+
+        # Menghitung probabilitas menggunakan valid_winrate
+        probability = (score_pct * 0.3) + (valid_winrate * 0.7)
 
         latest = df.sort_index().tail(1)
-
+        
         results.append({
             "Ticker": ticker,
             "Price": float(latest["Close"].values[0]),
             "SMA5": round(float(latest["SMA5"].values[0]), 2),
             "Warning": warning,
-            "Score (%)": round(score_pct,2),
-            "Winrate (%)": winrate,
-            "Probability (%)": round(probability,2),
+            "Score (%)": round(score_pct, 2),
+            "Winrate (%)": winrate, # Tetap tampilkan winrate asli untuk referensi
+            "Trades": total_trades, # --- PERUBAHAN 3: Tambahkan kolom jumlah trade ---
+            "Probability (%)": round(probability, 2),
             "EV (%)": ev
         })
 
-    df = pd.DataFrame(results)
+    # Nama variabel DataFrame diubah sedikit agar tidak bentrok dengan iterasi df di atas
+    hasil_df = pd.DataFrame(results)
 
-    if not df.empty:
-        df = df.sort_values(by="Probability (%)", ascending=False)
-        df.insert(0,"Rank",range(1,len(df)+1))
+    if not hasil_df.empty:
+        hasil_df = hasil_df.sort_values(by="Probability (%)", ascending=False)
+        hasil_df.insert(0, "Rank", range(1, len(hasil_df) + 1))
 
-    return df
+    return hasil_df
     
 
 # =========================

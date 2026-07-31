@@ -389,11 +389,9 @@ def calculate_score(df):
 # BACKTEST + EV
 # =========================
 def backtest_ev(df):
-
     returns = []
 
     for i in range(20, len(df)-1):
-
         if not is_signal(df, i):
             continue
 
@@ -404,16 +402,21 @@ def backtest_ev(df):
         high_next = next_day["High"]
 
         ret = (high_next - close_today) / close_today
-
         returns.append(ret)
 
-    if len(returns) == 0:
-        return 0, 0
+    # 1. Hitung total trade (jumlah sampel)
+    total_trades = len(returns)
 
-    winrate = sum(1 for r in returns if r >= 0.015) / len(returns)
-    ev = sum(returns) / len(returns)
+    # 2. Kembalikan 0 untuk ketiga nilai jika tidak ada trade
+    if total_trades == 0:
+        return 0, 0, 0
 
-    return round(winrate * 100, 2), round(ev * 100, 2)
+    # Menggunakan variabel total_trades agar kode lebih rapi
+    winrate = sum(1 for r in returns if r >= 0.015) / total_trades
+    ev = sum(returns) / total_trades
+
+    # 3. Tambahkan total_trades di hasil akhir
+    return round(winrate * 100, 2), round(ev * 100, 2), total_trades
 
 
 # =========================

@@ -145,7 +145,7 @@ def get_data(tickers):
 
     return yf.download(
         tickers=" ".join(tickers),
-        period="5y",
+        period="1y",
         group_by="ticker",
         progress=False,
         auto_adjust=False

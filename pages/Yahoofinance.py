@@ -56,7 +56,7 @@ def format_telegram(df):
 # =========================
 # GET ALL IDX TICKERS (MANUAL LIST)
 # =========================
-@st.cache_data(ttl=86400) # Cache 1 hari (24 jam)
+@st.cache_data(ttl=600) # Cache 1 hari (24 jam)
 def get_all_active_tickers():
     """Menggunakan daftar saham manual. Tambahkan saham baru di dalam list ini."""
     tickers = [

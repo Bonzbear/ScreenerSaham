@@ -164,7 +164,7 @@ def get_all_active_tickers():
 # =========================
 # YAHOO FINANCE DATA
 # =========================
-@st.cache_data(ttl=3600) # Cache 1 jam agar run selanjutnya instan
+@st.cache_data(ttl=600) # Cache 1 jam agar run selanjutnya instan
 def get_yahoo_data(tickers):
     combined = {}
     chunk_size = 150 # Batching agar request API Yahoo Finance tidak ditolak

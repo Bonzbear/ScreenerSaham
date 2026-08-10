@@ -360,15 +360,27 @@ def backtest_ev(df):
         ret = (high_next - close_today) / close_today
         returns.append(ret)
 
-    total_trades = len(returns)
+    # Jika tidak ada sinyal sama sekali
+    if len(returns) == 0:
+        return 0, 0
 
-    if total_trades == 0:
-        return 0, 0, 0
+    # Winrate (berdasarkan kodemu: profit >= 1.5%)
+    winrate = sum(1 for r in returns if r >= 0.015) / len(returns)
 
-    winrate = sum(1 for r in returns if r >= 0.015) / total_trades
-    ev = sum(returns) / total_trades
+    # --- BAGIAN YANG DIUBAH ---
+    
+    # 1. Filter hanya return yang profit (lebih besar dari 0)
+    profitable_returns = [r for r in returns if r > 0]
 
-    return round(winrate * 100, 2), round(ev * 100, 2), total_trades
+    # 2. Hitung rata-ratanya, tambahkan proteksi error jika tidak ada yang profit
+    if len(profitable_returns) == 0:
+        ev = 0
+    else:
+        ev = sum(profitable_returns) / len(profitable_returns)
+
+    # --------------------------
+
+    return round(winrate * 100, 2), round(ev * 100, 2)
 
 
 # =========================

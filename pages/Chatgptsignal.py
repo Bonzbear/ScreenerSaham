@@ -397,6 +397,51 @@ def backtest_ev(df, strategy):
 
     return round(winrate * 100, 2), round(ev * 100, 2), total_trades
 
+
+# =========================
+# CARI SUPPORT INTRADAY (15 Menit)
+# =========================
+def get_intraday_support(ticker, timeframe="15m", days=1):
+    """
+    Menarik data intraday dan mencari level terendah (Support)
+    selama X hari terakhir.
+    """
+    try:
+        # Tarik data intraday (contoh: 15 menit) untuk 2 hari terakhir 
+        # (agar aman jika hari ini belum ada transaksi)
+        data = yf.download(
+            tickers=ticker, 
+            period="2d", 
+            interval=timeframe, 
+            progress=False
+        )
+        
+        if data.empty:
+            return None
+            
+        # Jika MultiIndex (akibat yf.download format baru), rapikan
+        if isinstance(data.columns, pd.MultiIndex):
+            df = data[ticker].copy()
+        else:
+            df = data.copy()
+
+        # Ambil data HANYA untuk hari bursa terakhir yang tersedia di data tersebut
+        last_date = df.index[-1].date()
+        df_last_day = df[df.index.date == last_date]
+
+        # Cari titik terendah (Low) di hari tersebut
+        support_level = df_last_day["Low"].min()
+        
+        # Opsi Lanjutan: Bisa juga mencari support berdasarkan VWAP intraday
+        # atau Moving Average intraday jika mau lebih dinamis.
+        
+        return support_level
+        
+    except Exception as e:
+        return None
+
+
+
 # =========================
 # SCREENER (Murni Berbasis Backtest & Statistik)
 # =========================
@@ -452,6 +497,31 @@ def run_screener(data, offset=0, strategy="Momentum (Marubozu) - Target 1.5%"):
         # ----------------------------------------------------
 
         latest = df_target.sort_index().tail(1)
+        close_price = float(latest["Close"].values[0])
+        
+        # --- CARI SUPPORT INTRADAY ---
+        # Hanya dilakukan pada saham yang sudah LOLOS filter is_signal
+        # (Agar tidak membebani API)
+        
+        # Jika mengecek "Sinyal Hari Ini" (offset=0), cari support dari TF 15m
+        if offset == 0:
+            support_15m = get_intraday_support(ticker, timeframe="15m")
+            
+            # Jika YFinance gagal memberi data intraday, gunakan Low hari itu sebagai backup
+            if support_15m is None or pd.isna(support_15m):
+                support_15m = float(latest["Low"].values[0])
+                
+            # Hitung jarak SL (%)
+            jarak_sl_pct = ((close_price - support_15m) / close_price) * 100
+        else:
+            # Jika ngecek data Kemarin, skip intraday (terlalu rumit melacaknya)
+            support_15m = float(latest["Low"].values[0])
+            jarak_sl_pct = ((close_price - support_15m) / close_price) * 100
+        # -----------------------------
+
+        # ... (hitung cuan_hari_ini) ...
+
+
         
         cuan_hari_ini = "-"
         if offset == 1 and len(df) > target_idx + 1:
@@ -464,11 +534,13 @@ def run_screener(data, offset=0, strategy="Momentum (Marubozu) - Target 1.5%"):
 
         results.append({
             "Ticker": ticker,
-            "Price": float(latest["Close"].values[0]),
+            "Price": close_price,
+            "Support 15m": support_15m, # Kolom Baru
+            "Jarak SL (%)": f"-{abs(jarak_sl_pct):.2f}%", # Kolom Baru
             "Warning": warning,
             "Winrate (%)": raw_winrate, 
             "Trades": total_trades, 
-            "Score Adj. (%)": round(adjusted_winrate, 2), # Menggantikan kolom Probability lama
+            "Score Adj. (%)": round(adjusted_winrate, 2), 
             "EV (%)": ev,
             "Cuan Maks Pagi Ini": cuan_hari_ini
         })
@@ -488,9 +560,6 @@ def run_screener(data, offset=0, strategy="Momentum (Marubozu) - Target 1.5%"):
     
 
 
-# =========================
-# UI
-# =========================
 # =========================
 # UI
 # =========================
@@ -517,25 +586,41 @@ with col2:
         horizontal=False
     )
 st.write("---")
-# --------------------------------------
 
-offset_hari = 1 if "Kemarin" in mode_analisis else 0
+# --- KONTROL CACHE & SCAN ---
+col_btn1, col_btn2 = st.columns([1, 4])
 
-if st.button("▶️ Scan Seluruh Saham"):
-    with st.spinner("Membaca daftar kode saham dari sistem..."):
-        tickers = get_all_active_tickers()
+with col_btn1:
+    # Tombol Hapus Cache
+    if st.button("🔄 Bersihkan Cache Data"):
+        st.cache_data.clear()
+        # Opsional: Jika menggunakan Streamlit versi lama, gunakan st.legacy_caching.clear_cache()
+        # Jika ada data yang tersimpan di session state, hapus juga:
+        if "data" in st.session_state:
+            del st.session_state["data"]
+        if "df" in st.session_state:
+            del st.session_state["df"]
+        st.success("Cache berhasil dibersihkan! Data akan ditarik ulang dari Yahoo Finance.")
+
+with col_btn2:
+    # Tombol Scan Utama
+    offset_hari = 1 if "Kemarin" in mode_analisis else 0
+    if st.button("▶️ Scan Seluruh Saham", use_container_width=True):
         
-    data = get_yahoo_data(tickers)
-    st.session_state["data"] = data
-    
-    # ---> PERUBAHAN DI SINI: Kirim pilihan strategi dari UI ke fungsi
-    df = run_screener(data, offset=offset_hari, strategy=pilihan_strategi)
+        with st.spinner("Membaca daftar kode saham dari sistem..."):
+            tickers = get_all_active_tickers()
+            
+        # Mengunduh Data Yahoo Finance (Fungsi ini yang di-cache)
+        data = get_yahoo_data(tickers)
+        st.session_state["data"] = data
+        
+        df = run_screener(data, offset=offset_hari, strategy=pilihan_strategi)
 
-    if df.empty:
-        st.warning(f"Tidak ada sinyal yang memenuhi kriteria '{pilihan_strategi}' hari ini.")
-    else:
-        st.session_state["df"] = df
-        st.success(f"Selesai! {len(df)} saham potensial ditemukan untuk strategi {pilihan_strategi}.")
+        if df.empty:
+            st.warning(f"Tidak ada sinyal yang memenuhi kriteria '{pilihan_strategi}' hari ini.")
+        else:
+            st.session_state["df"] = df
+            st.success(f"Selesai! {len(df)} saham potensial ditemukan untuk strategi {pilihan_strategi}.")
 
 # =========================
 # DISPLAY + CHECKLIST

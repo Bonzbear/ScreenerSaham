@@ -287,7 +287,7 @@ def is_signal(df, i, strategy):
     if close > 6500 or close < 50:
         return False
     # Filter Likuiditas Dasar
-    if avg_value < 10_000_000_000:
+    if avg_value < 5_000_000_000:
         return False
 
     # ----------------------------------------------------
@@ -301,7 +301,7 @@ def is_signal(df, i, strategy):
         if volume < (avg_volume * 1.5): return False
             
         upper_wick_pct = (high - close) / close
-        if upper_wick_pct > 0.01: return False
+        if upper_wick_pct > 0.03: return False
             
         body_pct = (close - open_) / open_
         if body_pct < 0.02: return False

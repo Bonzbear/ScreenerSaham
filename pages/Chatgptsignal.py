@@ -414,14 +414,23 @@ def backtest_ev(df):
 # =========================
 # SCREENER
 # =========================
+# =========================
+# SCREENER
+# =========================
 def run_screener(data, offset=0):
     results = []
     
+    # --- TAMBAHAN FILTER SUSPEND ---
+    # 1. Cari tanggal bursa terakhir secara global dari semua saham yang ditarik
+    valid_dates = [df.index[-1] for df in data.values() if not df.empty]
+    if not valid_dates:
+        return pd.DataFrame()
+    
+    global_latest_date = max(valid_dates)
+    # -------------------------------
+    
     calc_bar = st.progress(0, text="Mengkalkulasi Signal & Backtest EV...")
     total_items = len(data)
-
-    if total_items == 0:
-        return pd.DataFrame()
 
     for idx, (ticker, df) in enumerate(data.items()):
         if idx % 50 == 0 or idx == total_items - 1:
@@ -429,24 +438,25 @@ def run_screener(data, offset=0):
             
         df = prepare_data(df)
 
-        # Pastikan data cukup panjang
         if len(df) < 30 + offset:
             continue
             
-        # Tentukan target hari (0 = hari ini, 1 = kemarin)
+        # --- TAMBAHAN FILTER SUSPEND ---
+        # 2. Jika tanggal data terakhir saham ini tidak sama dengan tanggal bursa terakhir,
+        # berarti saham ini tidak ada transaksi hari ini (Suspend / Mati / Gembok). Abaikan!
+        if df.index[-1] != global_latest_date:
+            continue
+        # -------------------------------
+
         target_idx = len(df) - 1 - offset
 
-        # Cek sinyal pada hari target
         if not is_signal(df, target_idx):
             continue
 
-        # Potong dataframe hanya sampai hari target untuk menghitung score 
-        # (agar tidak mengintip masa depan)
         df_target = df.iloc[:target_idx+1]
         score, warning = calculate_score(df_target)
         score_pct = (score / MAX_SCORE) * 100
 
-        # Backtest menggunakan dataframe sampai hari target
         winrate, ev, total_trades = backtest_ev(df_target)
 
         if total_trades < 5:
@@ -458,19 +468,15 @@ def run_screener(data, offset=0):
 
         latest = df_target.sort_index().tail(1)
         
-        # --- FITUR CEK HASIL HARI INI (Jika Backtest Kemarin) ---
         cuan_hari_ini = "-"
         if offset == 1 and len(df) > target_idx + 1:
-            # Mengambil data hari ini (T+1 dari hari target)
             data_besok = df.iloc[target_idx + 1]
             open_besok = data_besok["Open"]
             high_besok = data_besok["High"]
             
             if open_besok > 0:
-                # Hitung lompatan tertinggi dari harga Open ke High
                 potensi_profit = ((high_besok - open_besok) / open_besok) * 100
                 cuan_hari_ini = f"{potensi_profit:.2f}%"
-        # --------------------------------------------------------
 
         results.append({
             "Ticker": ticker,
@@ -482,7 +488,7 @@ def run_screener(data, offset=0):
             "Trades": total_trades, 
             "Probability (%)": round(probability, 2),
             "EV (%)": ev,
-            "Cuan Maks Pagi Ini": cuan_hari_ini # Menambahkan kolom hasil
+            "Cuan Maks Pagi Ini": cuan_hari_ini
         })
 
     calc_bar.empty()

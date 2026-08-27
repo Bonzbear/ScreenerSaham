@@ -318,7 +318,7 @@ def is_signal(df, i):
     # Jarak dari Close ke High maksimal 1% (Buntut atas sangat pendek/tidak ada)
     # Jika buntut atas panjang, artinya buyer gagal mempertahankan harga di pucuk.
     upper_wick_pct = (high - close) / close
-    if upper_wick_pct > 0.01: # Toleransi buntut atas max 1%
+    if upper_wick_pct > 0.05: # Toleransi buntut atas max 1%
         return False
         
     # D. Body Candle Cukup Signifikan

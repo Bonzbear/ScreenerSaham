@@ -303,9 +303,39 @@ def is_signal(df, i):
     # ==============================================================
     
     # A. Tren & Posisi (Harus hijau dan di atas MA5)
-    if close <= open_ or close <= prev_close or close <= sma5:
+    if close <= open_ or cldef is_signal(df, i):
+    today = df.iloc[i]
+    prev = df.iloc[i-1]
+    
+    open_ = today["Open"]
+    close = today["Close"]
+    volume = today["Volume"]
+
+    prev_close = prev["Close"]
+    prev_volume = prev["Volume"]
+
+    sma5 = today["SMA5"]
+    value = today["Value"]
+    avg_value = today["AvgValue20"]
+    avg_volume = today["VOLMA20"]
+
+    change_pct = (close - prev_close) / prev_close
+    ara = get_ara_limit(prev_close)
+
+    # Filter Harga
+    if close > 6500 or close < 50:
         return False
 
+    if ara == 0.25 and change_pct >= 0.24:
+        return False
+    if ara == 0.35 and change_pct >= 0.33:
+        return False
+
+    # Filter Likuiditas
+    if not (avg_value > 10_000_000_000 and avg_volume > 1_000_000):
+        return False
+
+    # Kriteria Sinyal Utama
     if not (
         open_ < close and
         volume > prev_volume and

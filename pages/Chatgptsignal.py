@@ -185,7 +185,7 @@ def get_yahoo_data(tickers):
 
         data = yf.download(
             tickers=chunk,
-            period="5y",
+            period="3y",
             group_by="ticker",
             progress=False,
             auto_adjust=False,
@@ -408,34 +408,43 @@ def backtest_ev(df):
 # =========================
 # SCREENER
 # =========================
-def run_screener(data):
+# =========================
+# SCREENER
+# =========================
+def run_screener(data, offset=0):
     results = []
     
-    # Progress bar untuk kalkulasi sinyal
     calc_bar = st.progress(0, text="Mengkalkulasi Signal & Backtest EV...")
     total_items = len(data)
 
-    # Antisipasi bila data kosong
     if total_items == 0:
         return pd.DataFrame()
 
     for idx, (ticker, df) in enumerate(data.items()):
-        # Update progress bar tiap 50 saham agar UI tidak ngelag
         if idx % 50 == 0 or idx == total_items - 1:
             calc_bar.progress((idx + 1) / total_items, text=f"Menganalisis {ticker} ({idx+1}/{total_items})...")
             
         df = prepare_data(df)
 
-        if len(df) < 30:
+        # Pastikan data cukup panjang
+        if len(df) < 30 + offset:
+            continue
+            
+        # Tentukan target hari (0 = hari ini, 1 = kemarin)
+        target_idx = len(df) - 1 - offset
+
+        # Cek sinyal pada hari target
+        if not is_signal(df, target_idx):
             continue
 
-        if not is_signal(df, len(df)-1):
-            continue
-
-        score, warning = calculate_score(df)
+        # Potong dataframe hanya sampai hari target untuk menghitung score 
+        # (agar tidak mengintip masa depan)
+        df_target = df.iloc[:target_idx+1]
+        score, warning = calculate_score(df_target)
         score_pct = (score / MAX_SCORE) * 100
 
-        winrate, ev, total_trades = backtest_ev(df)
+        # Backtest menggunakan dataframe sampai hari target
+        winrate, ev, total_trades = backtest_ev(df_target)
 
         if total_trades < 5:
             valid_winrate = 50.0 
@@ -444,8 +453,22 @@ def run_screener(data):
 
         probability = (score_pct * 0.3) + (valid_winrate * 0.7)
 
-        latest = df.sort_index().tail(1)
+        latest = df_target.sort_index().tail(1)
         
+        # --- FITUR CEK HASIL HARI INI (Jika Backtest Kemarin) ---
+        cuan_hari_ini = "-"
+        if offset == 1 and len(df) > target_idx + 1:
+            # Mengambil data hari ini (T+1 dari hari target)
+            data_besok = df.iloc[target_idx + 1]
+            open_besok = data_besok["Open"]
+            high_besok = data_besok["High"]
+            
+            if open_besok > 0:
+                # Hitung lompatan tertinggi dari harga Open ke High
+                potensi_profit = ((high_besok - open_besok) / open_besok) * 100
+                cuan_hari_ini = f"{potensi_profit:.2f}%"
+        # --------------------------------------------------------
+
         results.append({
             "Ticker": ticker,
             "Price": float(latest["Close"].values[0]),
@@ -455,7 +478,8 @@ def run_screener(data):
             "Winrate (%)": winrate, 
             "Trades": total_trades, 
             "Probability (%)": round(probability, 2),
-            "EV (%)": ev
+            "EV (%)": ev,
+            "Cuan Maks Pagi Ini": cuan_hari_ini # Menambahkan kolom hasil
         })
 
     calc_bar.empty()
@@ -471,14 +495,25 @@ def run_screener(data):
 # =========================
 # UI
 # =========================
+# =========================
+# UI
+# =========================
 st.set_page_config(page_title="Screener Saham", layout="wide")
 st.title("Screener Saham Indonesia (Daftar Manual)")
 
 st.markdown("""
-Sistem ini menggunakan **daftar saham manual** yang sudah Anda tentukan di dalam *script*.  
-Total saham di dalam sistem saat ini: **921 Saham**.
-*Catatan: Proses pertama kali akan memakan waktu **1-3 menit**.*
+Sistem ini mencari saham dengan momentum penutupan yang kuat (Buy on Open besoknya).
 """)
+
+# Menambahkan Pilihan Hari
+mode_analisis = st.radio(
+    "Pilih Waktu Analisis Sinyal:", 
+    ["Sinyal Hari Ini (Live/Data Terakhir)", "Sinyal Kemarin (Cek Hasil Pagi Ini)"],
+    horizontal=True
+)
+
+# Set offset berdasarkan pilihan
+offset_hari = 1 if "Kemarin" in mode_analisis else 0
 
 if st.button("▶️ Scan Seluruh Saham"):
     
@@ -490,11 +525,11 @@ if st.button("▶️ Scan Seluruh Saham"):
     data = get_yahoo_data(tickers)
     st.session_state["data"] = data
     
-    # Menjalankan Screener
-    df = run_screener(data)
+    # Menjalankan Screener dengan offset yang dipilih
+    df = run_screener(data, offset=offset_hari)
 
     if df.empty:
-        st.warning("Tidak ada sinyal saham yang memenuhi kriteria kuat hari ini.")
+        st.warning("Tidak ada sinyal saham yang memenuhi kriteria.")
     else:
         st.session_state["df"] = df
         st.success(f"Selesai! {len(df)} saham potensial ditemukan.")

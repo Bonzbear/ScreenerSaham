@@ -262,15 +262,7 @@ def get_ara_limit(price):
 # =========================
 # SIGNAL
 # =========================
-# =========================
-# SIGNAL (Buy On Open Momentum)
-# =========================
-# =========================
-# SIGNAL (Buy On Open Momentum)
-# =========================
-# =========================
-# SIGNAL (Multi-Kriteria)
-# =========================
+
 def is_signal(df, i, strategy):
     today = df.iloc[i]
     prev = df.iloc[i-1]
@@ -339,43 +331,37 @@ def is_signal(df, i, strategy):
 # =========================
 # SCORE
 # =========================
-def calculate_score(df):
-    today = df.iloc[-1]
-    prev = df.iloc[-2]
+# def calculate_score(df):
+#    today = df.iloc[-1]
+#    prev = df.iloc[-2]
 
-    open_ = today["Open"]
-    high = today["High"]
-    low = today["Low"]
-    close = today["Close"]
+#    open_ = today["Open"]
+#    high = today["High"]
+#    low = today["Low"]
+#    close = today["Close"]
 
-    score = 0
-    warning = ""
+#    score = 0
+#    warning = ""
 
-    if prev["Close"] < prev["SMA5"]: score += 125
-    if today["Volume"] > today["VOLMA20"]: score += 125
-    if today["Volume"] > today["VOLMA5"]: score += 125
-    if today["Low"] > prev["Low"]: score += 125
-    if today["High"] > prev["High"]: score += 125
-    if (open_ - low) > (high - close): score += 125
-    if today["Close"] > today["VWAP"]: score += 125
-    if prev["Close"] < prev["VWAP"]: score += 125
+#    if prev["Close"] < prev["SMA5"]: score += 125
+#    if today["Volume"] > today["VOLMA20"]: score += 125
+#    if today["Volume"] > today["VOLMA5"]: score += 125
+#    if today["Low"] > prev["Low"]: score += 125
+#    if today["High"] > prev["High"]: score += 125
+#    if (open_ - low) > (high - close): score += 125
+#    if today["Close"] > today["VWAP"]: score += 125
+#    if prev["Close"] < prev["VWAP"]: score += 125
 
-    body = abs(close - open_)
-    upper_wick = high - max(close, open_)
+#    body = abs(close - open_)
+#    upper_wick = high - max(close, open_)
 
-    if body > 0 and upper_wick > body * 1.5:
-        score -= 100
-        warning = "⚠️"
+#    if body > 0 and upper_wick > body * 1.5:
+#        score -= 100
+#        warning = "⚠️"
 
-    return score, warning
+#    return score, warning
 
 
-# =========================
-# BACKTEST + EV
-# =========================
-# =========================
-# BACKTEST + EV (Buy on Open Logic)
-# =========================
 # =========================
 # BACKTEST + EV (Disesuaikan dengan Strategi)
 # =========================
@@ -410,11 +396,9 @@ def backtest_ev(df, strategy):
     ev = sum(profitable_returns) / len(profitable_returns) if len(profitable_returns) > 0 else 0
 
     return round(winrate * 100, 2), round(ev * 100, 2), total_trades
+
 # =========================
-# SCREENER
-# =========================
-# =========================
-# SCREENER
+# SCREENER (Murni Berbasis Backtest & Statistik)
 # =========================
 def run_screener(data, offset=0, strategy="Momentum (Marubozu) - Target 1.5%"):
     results = []
@@ -437,19 +421,35 @@ def run_screener(data, offset=0, strategy="Momentum (Marubozu) - Target 1.5%"):
 
         target_idx = len(df) - 1 - offset
 
-        # ---> PERUBAHAN DI SINI: Masukkan parameter strategy
+        # Filter Sinyal berdasarkan strategi
         if not is_signal(df, target_idx, strategy):
             continue
 
         df_target = df.iloc[:target_idx+1]
-        score, warning = calculate_score(df_target)
-        score_pct = (score / MAX_SCORE) * 100
+        
+        # Jalankan Backtest
+        raw_winrate, ev, total_trades = backtest_ev(df_target, strategy)
 
-        # ---> PERUBAHAN DI SINI: Masukkan parameter strategy
-        winrate, ev, total_trades = backtest_ev(df_target, strategy)
-
-        valid_winrate = 50.0 if total_trades < 5 else winrate
-        probability = (score_pct * 0.3) + (valid_winrate * 0.7)
+        # ----------------------------------------------------
+        # PERHITUNGAN "ADJUSTED WINRATE" (Penyeimbang Trades)
+        # ----------------------------------------------------
+        # Target ideal kita adalah sebuah sinyal muncul minimal 20 kali dalam historis data.
+        IDEAL_TRADES = 20
+        
+        if total_trades == 0:
+            adjusted_winrate = 0.0
+            warning = "⚠️ No Data"
+        elif total_trades < IDEAL_TRADES:
+            # Jika trade di bawah 20, Winrate akan didiskon menuju angka rata-rata (50%).
+            # Semakin kecil jumlah trade, diskonnya semakin besar.
+            weight = total_trades / IDEAL_TRADES
+            adjusted_winrate = (raw_winrate * weight) + (50.0 * (1 - weight))
+            warning = "⚠️ Low Trades" if total_trades < 5 else ""
+        else:
+            # Jika trade >= 20, gunakan Winrate asli sepenuhnya
+            adjusted_winrate = raw_winrate
+            warning = ""
+        # ----------------------------------------------------
 
         latest = df_target.sort_index().tail(1)
         
@@ -465,12 +465,10 @@ def run_screener(data, offset=0, strategy="Momentum (Marubozu) - Target 1.5%"):
         results.append({
             "Ticker": ticker,
             "Price": float(latest["Close"].values[0]),
-            "SMA5": round(float(latest["SMA5"].values[0]), 2),
             "Warning": warning,
-            "Score (%)": round(score_pct, 2),
-            "Winrate (%)": winrate, 
+            "Winrate (%)": raw_winrate, 
             "Trades": total_trades, 
-            "Probability (%)": round(probability, 2),
+            "Score Adj. (%)": round(adjusted_winrate, 2), # Menggantikan kolom Probability lama
             "EV (%)": ev,
             "Cuan Maks Pagi Ini": cuan_hari_ini
         })
@@ -479,7 +477,11 @@ def run_screener(data, offset=0, strategy="Momentum (Marubozu) - Target 1.5%"):
     df_result = pd.DataFrame(results)
 
     if not df_result.empty:
-        df_result = df_result.sort_values(by="Probability (%)", ascending=False)
+        # Urutkan berdasarkan Skor Adjusted (Winrate yang sudah diseimbangkan) lalu EV
+        df_result = df_result.sort_values(
+            by=["Score Adj. (%)", "EV (%)"], 
+            ascending=[False, False]
+        )
         df_result.insert(0, "Rank", range(1, len(df_result)+1))
 
     return df_result

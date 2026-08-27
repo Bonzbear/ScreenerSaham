@@ -295,7 +295,7 @@ def is_signal(df, i):
 
     # 3. Filter Likuiditas (Wajib likuid agar bisa Auto Sell besok paginya)
     # Transaksi rata-rata 20 hari wajib > Rp 10 Miliar
-    if avg_value < 10_000_000_000:
+    if avg_value > 10_000_000_000:
         return False
 
     # ==============================================================
@@ -306,22 +306,13 @@ def is_signal(df, i):
     if close <= open_ or close <= prev_close or close <= sma5:
         return False
 
-    # B. Volume Spike (Volume hari ini WAJIB lebih besar 1.5x dari rata-rata 20 hari)
-    # Ini menandakan ada akumulasi besar-besaran sebelum pasar tutup
-    if volume < (avg_volume * 1.5):
-        return False
-        
-    # C. Close = High (Nyaris Marubozu) - INI YANG PALING PENTING
-    # Jarak dari Close ke High maksimal 1% (Buntut atas sangat pendek/tidak ada)
-    # Jika buntut atas panjang, artinya buyer gagal mempertahankan harga di pucuk.
-    upper_wick_pct = (high - close) / close
-    if upper_wick_pct > 0.01: # Toleransi buntut atas max 1%
-        return False
-        
-    # D. Body Candle Cukup Signifikan
-    # Kenaikan (Body) hari ini minimal 2%. Hindari candle doji/tipis yang volumenya besar (rawan distribusi).
-    body_pct = (close - open_) / open_
-    if body_pct < 0.02:
+    if not (
+        open_ < close and
+        volume > prev_volume and
+        prev_close < close and
+        close > sma5 and
+        value > 10_000_000_000
+    ):
         return False
 
     return True

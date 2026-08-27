@@ -298,7 +298,7 @@ def is_signal(df, i):
 
     # 3. Filter Likuiditas (Wajib likuid agar bisa Auto Sell besok paginya)
     # Transaksi rata-rata 20 hari wajib > Rp 10 Miliar
-    if avg_value > 10_000_000_000:
+    if avg_value < 5_000_000_000:
         return False
 
     # ==============================================================

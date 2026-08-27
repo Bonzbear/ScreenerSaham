@@ -268,7 +268,10 @@ def get_ara_limit(price):
 # =========================
 # SIGNAL (Buy On Open Momentum)
 # =========================
-def is_signal(df, i):
+# =========================
+# SIGNAL (Multi-Kriteria)
+# =========================
+def is_signal(df, i, strategy):
     today = df.iloc[i]
     prev = df.iloc[i-1]
     
@@ -278,57 +281,60 @@ def is_signal(df, i):
     volume = today["Volume"]
 
     prev_close = prev["Close"]
+    prev_volume = prev["Volume"]
 
     sma5 = today["SMA5"]
     avg_value = today["AvgValue20"]
     avg_volume = today["VOLMA20"]
+    value = today["Value"]
 
     change_pct = (close - prev_close) / prev_close
     ara = get_ara_limit(prev_close)
 
-    # 1. Filter Harga (Hindari saham gocap murni atau saham terlalu mahal)
+    # Filter Harga Dasar (Berlaku untuk semua strategi)
     if close > 6500 or close < 50:
         return False
-
-    # 2. Filter ARA (Hindari saham yang ditutup ARA kaku, rawan profit taking besok pagi)
-    if ara == 0.25 and change_pct >= 0.24:
-        return False
-    if ara == 0.35 and change_pct >= 0.33:
+    # Filter Likuiditas Dasar
+    if avg_value < 10_000_000_000:
         return False
 
-    # 3. Filter Likuiditas (Wajib likuid agar bisa Auto Sell besok paginya)
-    # Transaksi rata-rata 20 hari wajib > Rp 10 Miliar
-    if avg_value < 5_000_000_000:
-        return False
-
-    # ==============================================================
-    # 4. KRITERIA KUNCI: STRATEGI BUY ON OPEN (MOMENTUM CLOSING)
-    # ==============================================================
-    
-    # A. Tren & Posisi (Harus hijau dan di atas MA5)
-    if close <= open_ or close <= prev_close or close <= sma5:
-        return False
-
-    # B. Volume Spike (Volume hari ini WAJIB lebih besar 1.5x dari rata-rata 20 hari)
-    # Ini menandakan ada akumulasi besar-besaran sebelum pasar tutup
-    if volume < (avg_volume * 1.5):
-        return False
+    # ----------------------------------------------------
+    # STRATEGI 1: BUY ON OPEN (MOMENTUM MARUBOZU)
+    # ----------------------------------------------------
+    if strategy == "Momentum (Marubozu) - Target 1.5%":
+        if ara == 0.25 and change_pct >= 0.24: return False
+        if ara == 0.35 and change_pct >= 0.33: return False
         
-    # C. Close = High (Nyaris Marubozu) - INI YANG PALING PENTING
-    # Jarak dari Close ke High maksimal 1% (Buntut atas sangat pendek/tidak ada)
-    # Jika buntut atas panjang, artinya buyer gagal mempertahankan harga di pucuk.
-    upper_wick_pct = (high - close) / close
-    if upper_wick_pct > 0.05: # Toleransi buntut atas max 1%
-        return False
+        if close <= open_ or close <= prev_close or close <= sma5: return False
+        if volume < (avg_volume * 1.5): return False
+            
+        upper_wick_pct = (high - close) / close
+        if upper_wick_pct > 0.01: return False
+            
+        body_pct = (close - open_) / open_
+        if body_pct < 0.02: return False
         
-    # D. Body Candle Cukup Signifikan
-    # Kenaikan (Body) hari ini minimal 2%. Hindari candle doji/tipis yang volumenya besar (rawan distribusi).
-    body_pct = (close - open_) / open_
-    if body_pct < 0.02:
-        return False
+        return True
 
-    return True
+    # ----------------------------------------------------
+    # STRATEGI 2: VOLATILITAS TINGGI (KENAIKAN > 20%)
+    # ----------------------------------------------------
+    elif strategy == "Kenaikan Ekstrem (> 20%) - Target 3%":
+        if change_pct <= 0.20:
+            return False
 
+        if not (
+            open_ < close and
+            volume > prev_volume and
+            prev_close < close and
+            close > sma5 and
+            value > 10_000_000_000
+        ):
+            return False
+
+        return True
+
+    return False
 
 # =========================
 # SCORE
@@ -370,42 +376,38 @@ def calculate_score(df):
 # =========================
 # BACKTEST + EV (Buy on Open Logic)
 # =========================
-def backtest_ev(df):
+# =========================
+# BACKTEST + EV (Disesuaikan dengan Strategi)
+# =========================
+def backtest_ev(df, strategy):
     returns = []
 
     for i in range(20, len(df)-1):
-        if not is_signal(df, i):
+        if not is_signal(df, i, strategy): # <-- Lempar parameter ke is_signal
             continue
 
         next_day = df.iloc[i+1]
-
-        # Karena strategi Anda Beli di OPEN besok paginya:
         open_next = next_day["Open"]
         high_next = next_day["High"]
 
-        # Hindari error bagi nol jika open_next = 0 (data corrupt)
-        if open_next == 0:
-            continue
+        if open_next == 0: continue
 
-        # Hitung untung dari harga BUKA (Open) ke harga TERTINGGI (High) hari itu
         ret = (high_next - open_next) / open_next
         returns.append(ret)
 
     total_trades = len(returns)
+    if total_trades == 0: return 0, 0, 0
 
-    if total_trades == 0:
-        return 0, 0, 0
-
-    # Hitung Winrate: Berapa kali harga High menyentuh +1.5% dari harga Buka (Open)?
-    # Asumsi target 1% ++ (1.5% untuk cover fee sekuritas)
-    winrate = sum(1 for r in returns if r >= 0.015) / total_trades
-
-    # Hitung rata-rata profit
-    profitable_returns = [r for r in returns if r > 0]
-    if len(profitable_returns) == 0:
-        ev = 0
+    # Sesuaikan Target Profit Winrate berdasarkan Strategi
+    if strategy == "Kenaikan Ekstrem (> 20%) - Target 3%":
+        target_profit = 0.03 # Target 3% untuk saham ARA/Volatil
     else:
-        ev = sum(profitable_returns) / len(profitable_returns)
+        target_profit = 0.015 # Target 1.5% untuk strategi Momentum reguler
+
+    winrate = sum(1 for r in returns if r >= target_profit) / total_trades
+
+    profitable_returns = [r for r in returns if r > 0]
+    ev = sum(profitable_returns) / len(profitable_returns) if len(profitable_returns) > 0 else 0
 
     return round(winrate * 100, 2), round(ev * 100, 2), total_trades
 # =========================
@@ -414,20 +416,12 @@ def backtest_ev(df):
 # =========================
 # SCREENER
 # =========================
-# =========================
-# SCREENER
-# =========================
-def run_screener(data, offset=0):
+def run_screener(data, offset=0, strategy="Momentum (Marubozu) - Target 1.5%"):
     results = []
     
-    # --- TAMBAHAN FILTER SUSPEND ---
-    # 1. Cari tanggal bursa terakhir secara global dari semua saham yang ditarik
     valid_dates = [df.index[-1] for df in data.values() if not df.empty]
-    if not valid_dates:
-        return pd.DataFrame()
-    
+    if not valid_dates: return pd.DataFrame()
     global_latest_date = max(valid_dates)
-    # -------------------------------
     
     calc_bar = st.progress(0, text="Mengkalkulasi Signal & Backtest EV...")
     total_items = len(data)
@@ -438,32 +432,23 @@ def run_screener(data, offset=0):
             
         df = prepare_data(df)
 
-        if len(df) < 30 + offset:
-            continue
-            
-        # --- TAMBAHAN FILTER SUSPEND ---
-        # 2. Jika tanggal data terakhir saham ini tidak sama dengan tanggal bursa terakhir,
-        # berarti saham ini tidak ada transaksi hari ini (Suspend / Mati / Gembok). Abaikan!
-        if df.index[-1] != global_latest_date:
-            continue
-        # -------------------------------
+        if len(df) < 30 + offset: continue
+        if df.index[-1] != global_latest_date: continue
 
         target_idx = len(df) - 1 - offset
 
-        if not is_signal(df, target_idx):
+        # ---> PERUBAHAN DI SINI: Masukkan parameter strategy
+        if not is_signal(df, target_idx, strategy):
             continue
 
         df_target = df.iloc[:target_idx+1]
         score, warning = calculate_score(df_target)
         score_pct = (score / MAX_SCORE) * 100
 
-        winrate, ev, total_trades = backtest_ev(df_target)
+        # ---> PERUBAHAN DI SINI: Masukkan parameter strategy
+        winrate, ev, total_trades = backtest_ev(df_target, strategy)
 
-        if total_trades < 5:
-            valid_winrate = 50.0 
-        else:
-            valid_winrate = winrate
-
+        valid_winrate = 50.0 if total_trades < 5 else winrate
         probability = (score_pct * 0.3) + (valid_winrate * 0.7)
 
         latest = df_target.sort_index().tail(1)
@@ -473,7 +458,6 @@ def run_screener(data, offset=0):
             data_besok = df.iloc[target_idx + 1]
             open_besok = data_besok["Open"]
             high_besok = data_besok["High"]
-            
             if open_besok > 0:
                 potensi_profit = ((high_besok - open_besok) / open_besok) * 100
                 cuan_hari_ini = f"{potensi_profit:.2f}%"
@@ -501,6 +485,7 @@ def run_screener(data, offset=0):
     return df_result
     
 
+
 # =========================
 # UI
 # =========================
@@ -510,38 +495,45 @@ def run_screener(data, offset=0):
 st.set_page_config(page_title="Screener Saham", layout="wide")
 st.title("Screener Saham Indonesia (Daftar Manual)")
 
-st.markdown("""
-Sistem ini mencari saham dengan momentum penutupan yang kuat (Buy on Open besoknya).
-""")
+# --- MENU PILIHAN KONDISI SCREENER ---
+st.markdown("### ⚙️ Pengaturan Screener")
+col1, col2 = st.columns(2)
 
-# Menambahkan Pilihan Hari
-mode_analisis = st.radio(
-    "Pilih Waktu Analisis Sinyal:", 
-    ["Sinyal Hari Ini (Live/Data Terakhir)", "Sinyal Kemarin (Cek Hasil Pagi Ini)"],
-    horizontal=True
-)
+with col1:
+    pilihan_strategi = st.selectbox(
+        "Pilih Kriteria Strategi:",
+        [
+            "Momentum (Marubozu) - Target 1.5%", 
+            "Kenaikan Ekstrem (> 20%) - Target 3%"
+        ]
+    )
 
-# Set offset berdasarkan pilihan
+with col2:
+    mode_analisis = st.radio(
+        "Pilih Waktu Analisis Sinyal:", 
+        ["Sinyal Hari Ini (Live/Data Terakhir)", "Sinyal Kemarin (Cek Hasil Pagi Ini)"],
+        horizontal=False
+    )
+st.write("---")
+# --------------------------------------
+
 offset_hari = 1 if "Kemarin" in mode_analisis else 0
 
 if st.button("▶️ Scan Seluruh Saham"):
-    
     with st.spinner("Membaca daftar kode saham dari sistem..."):
         tickers = get_all_active_tickers()
-        st.info(f"Berhasil memuat **{len(tickers)}** kode saham.")
-
-    # Mengunduh Data Yahoo Finance
+        
     data = get_yahoo_data(tickers)
     st.session_state["data"] = data
     
-    # Menjalankan Screener dengan offset yang dipilih
-    df = run_screener(data, offset=offset_hari)
+    # ---> PERUBAHAN DI SINI: Kirim pilihan strategi dari UI ke fungsi
+    df = run_screener(data, offset=offset_hari, strategy=pilihan_strategi)
 
     if df.empty:
-        st.warning("Tidak ada sinyal saham yang memenuhi kriteria.")
+        st.warning(f"Tidak ada sinyal yang memenuhi kriteria '{pilihan_strategi}' hari ini.")
     else:
         st.session_state["df"] = df
-        st.success(f"Selesai! {len(df)} saham potensial ditemukan.")
+        st.success(f"Selesai! {len(df)} saham potensial ditemukan untuk strategi {pilihan_strategi}.")
 
 # =========================
 # DISPLAY + CHECKLIST

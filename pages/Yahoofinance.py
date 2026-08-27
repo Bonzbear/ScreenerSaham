@@ -386,6 +386,16 @@ def backtest_ev(df):
 def run_screener(data):
     results = []
     
+    # --- MULAI PENAMBAHAN FILTER SUSPEND ---
+    # 1. Cari tanggal bursa terakhir secara global dari semua saham
+    valid_dates = [df.index[-1] for df in data.values() if not df.empty]
+    
+    if not valid_dates:
+        return pd.DataFrame()
+        
+    global_latest_date = max(valid_dates)
+    # --- AKHIR PENAMBAHAN FILTER SUSPEND ---
+    
     # Progress bar untuk kalkulasi sinyal
     calc_bar = st.progress(0, text="Mengkalkulasi Signal & Backtest EV...")
     total_items = len(data)
@@ -403,6 +413,13 @@ def run_screener(data):
 
         if len(df) < 30:
             continue
+
+        # --- MULAI PENAMBAHAN FILTER SUSPEND ---
+        # 2. Jika tanggal terakhir data saham ini berbeda dengan tanggal bursa terakhir, 
+        # artinya saham ini sedang suspend atau tidak ada transaksi.
+        if df.index[-1] != global_latest_date:
+            continue
+        # --- AKHIR PENAMBAHAN FILTER SUSPEND ---
 
         if not is_signal(df, len(df)-1):
             continue

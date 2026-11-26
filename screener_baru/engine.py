@@ -20,12 +20,14 @@ class Strategy:
     name: str                                   # tampil di kolom "Screener" ("-" untuk manual)
     mask: Callable[[pd.DataFrame], pd.Series]   # d (hasil prepare) -> boolean per hari
     bt: BacktestParams
+    extras: Callable[[pd.DataFrame], dict] | None = None  # kolom info & bonus untuk kandidat
 
 
 def strategy_from_preset(preset: Preset, values: dict | None, bt: BacktestParams) -> Strategy:
     values = {**preset.defaults(), **(values or {})}
     name = preset.name if values == preset.defaults() else f"{preset.name} (diubah)"
-    return Strategy(name, lambda d, _v=values: preset.mask(d, _v), bt)
+    extras = (lambda d, _v=values: preset.extras(d, _v)) if preset.extras else None
+    return Strategy(name, lambda d, _v=values: preset.mask(d, _v), bt, extras)
 
 
 def run(
@@ -63,19 +65,27 @@ def run(
             # kandidat hari ini; saham tanpa candle di tanggal itu (suspend/libur) dilewati
             if mask[-1] and d.index[-1] == screen_date:
                 last, prev_close = d.iloc[-1], d["PrevClose"].iloc[-1]
-                cands.append(
-                    {
-                        "Screener": s.name,
-                        "Ticker": ticker,
-                        "Harga": float(last["Close"]),
-                        "Naik (%)": round((last["Close"] / prev_close - 1) * 100, 2),
-                        "Nilai (Rp M)": round(last["Value"] / 1e9, 1),
-                        "Warning": last["Warning"],
-                        "TP (%)": s.bt.tp_pct,
-                        "SL (%)": s.bt.sl_pct,
-                        "Hari": s.bt.hold_days,
-                    }
-                )
+                row = {
+                    "Screener": s.name,
+                    "Ticker": ticker,
+                    "Harga": float(last["Close"]),
+                    "Naik (%)": round((last["Close"] / prev_close - 1) * 100, 2),
+                    "Nilai (Rp M)": round(last["Value"] / 1e9, 1),
+                    "Warning": last["Warning"],
+                    "TP (%)": s.bt.tp_pct,
+                    "SL (%)": s.bt.sl_pct,
+                    "Hari": s.bt.hold_days,
+                }
+                bonus = []
+                for k, ser in (s.extras(d) if s.extras else {}).items():
+                    v = ser.iloc[-1]
+                    if ser.dtype == bool:
+                        if bool(v):
+                            bonus.append(k)
+                    else:
+                        row[k] = None if pd.isna(v) else round(float(v), 2)
+                row["Bonus"] = ", ".join(bonus)
+                cands.append(row)
 
     trades = pd.concat(trade_frames, ignore_index=True) if trade_frames else pd.DataFrame(columns=TRADE_COLS_S)
     if not cands:

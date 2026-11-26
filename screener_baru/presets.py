@@ -10,12 +10,21 @@ Aturan pembacaan rumus (sama untuk semua paket):
 - llv(low,N) = harga Low terendah dalam N hari terakhir; "prev llv" = nilai llv kemarin.
 - Bollinger(20,2): mid = SMA20, bawah/atas = mid -/+ 2 x simpangan baku (populasi);
   bandwidth = (atas - bawah) / mid.
+
+Syarat tambahan paket Pullback (parameter bisa diubah / dimatikan dengan 0):
+- Naik tinggi sebelumnya : High tertinggi dalam N hari terakhir (sampai kemarin) minimal x% di atas garis
+                           (garis dihitung pada hari masing-masing).
+- Sentuhan pertama       : sejak hari puncak itu, tidak pernah ada hari dengan Low <= garis (sampai kemarin).
+- Datang dari atas       : close kemarin di atas garis dan close hari ini turun dibanding kemarin.
+Kolom "Jarak ke garis (%)" = (Close / garis - 1) x 100; makin kecil makin dekat.
+Kolom "Bonus" = syarat "lebih baik jika ..." yang terpenuhi (tidak menyaring, hanya informasi).
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Optional
 
+import numpy as np
 import pandas as pd
 
 BILLION = 1e9
@@ -37,6 +46,9 @@ class Preset:
     tp_pct: float = 1.5
     sl_pct: float = 0.0     # 0 = tanpa SL
     hold_days: int = 1      # D+1
+    # extras(d, p) -> {nama: Series}. Series bool = Bonus (ditulis di kolom "Bonus"),
+    # Series angka = kolom informasi tambahan.
+    extras: Optional[Callable[[pd.DataFrame, dict], dict]] = None
 
     def defaults(self) -> dict:
         return {k: v.default for k, v in self.params.items()}
@@ -52,10 +64,38 @@ def ema(d: pd.DataFrame, n) -> pd.Series:
     return d["Close"].ewm(span=n, adjust=False, min_periods=n).mean()
 
 
+def line(d: pd.DataFrame, n, kind=0) -> pd.Series:
+    """Garis MA: kind 0 = SMA, 1 = EMA."""
+    return ema(d, n) if int(kind) == 1 else sma(d, n)
+
+
 def bollinger(d: pd.DataFrame, n=20, k=2.0):
     mid = sma(d, n)
     sd = d["Close"].rolling(int(n)).std(ddof=0)
     return mid, mid - k * sd, mid + k * sd
+
+
+def peak_and_touches(d: pd.DataFrame, ln: pd.Series, window: int):
+    """Untuk tiap hari t (jendela = N hari sebelum t, t tidak ikut):
+    - peak   : nilai terbesar dari (High/garis - 1) di jendela itu
+    - touches: jumlah hari SETELAH hari puncak sampai kemarin yang Low-nya <= garis hari itu
+    NaN bila jendela belum penuh atau garis belum tersedia."""
+    n, W = len(d), int(window)
+    peak = np.full(n, np.nan)
+    touches = np.full(n, np.nan)
+    if n > W > 0:
+        ext = (d["High"] / ln - 1).to_numpy(float)
+        touched = (d["Low"] <= ln).to_numpy(bool)
+        e = np.where(np.isnan(ext), -np.inf, ext)
+        cs = np.concatenate([[0], np.cumsum(touched)])  # cs[k] = jumlah touched di indeks [0, k)
+        win = np.lib.stride_tricks.sliding_window_view(e, W)[: n - W]  # baris i = e[i : i+W], t = i+W
+        am, pv = win.argmax(axis=1), win.max(axis=1)
+        t = np.arange(W, n)
+        pidx = t - W + am
+        ok = np.isfinite(pv)
+        peak[W:][ok] = pv[ok]
+        touches[W:][ok] = (cs[t] - cs[pidx + 1])[ok]
+    return pd.Series(peak, index=d.index), pd.Series(touches, index=d.index)
 
 
 def _value_ok(d, p):
@@ -64,21 +104,33 @@ def _value_ok(d, p):
 
 # --------------------------------------------------------------------- rumus
 def pullback_ma(d, p):
-    ma = sma(d, p["ma_period"])
+    ma = line(d, p["ma_period"], p["ma_type"])
+    c = d["Close"]
     prev_llv = d["Low"].rolling(int(p["llv_days"])).min().shift(1)
-    return (
-        (prev_llv > ma)
-        & (d["Close"] >= ma * p["low_tol"])
-        & (d["Close"] <= ma * p["high_tol"])
-        & _value_ok(d, p)
-    )
+    m = (prev_llv > ma) & (c >= ma * p["low_tol"]) & (c <= ma * p["high_tol"]) & _value_ok(d, p)
+    if p["need_trend"]:
+        m &= line(d, 50, p["ma_type"]) > line(d, 200, p["ma_type"])
+    if p["min_ext_pct"] > 0 or p["need_first_touch"]:
+        peak, touches = peak_and_touches(d, ma, p["peak_window"])
+        if p["min_ext_pct"] > 0:
+            m &= peak * 100 >= p["min_ext_pct"]
+        if p["need_first_touch"]:
+            m &= touches == 0
+    if p["need_from_above"]:
+        m &= (c.shift(1) > ma) & (c < c.shift(1))
+    return m
+
+
+def pullback_ma_extras(d, p):
+    ma = line(d, p["ma_period"], p["ma_type"])
+    return {"Jarak ke garis (%)": (d["Close"] / ma - 1) * 100}
 
 
 def pullback_bb_mid(d, p):
     mid, low, up = bollinger(d, 20, 2)
     bw = (up - low) / mid
     c = d["Close"]
-    return (
+    m = (
         (c >= mid * p["low_tol"])
         & (c <= mid * p["high_tol"])
         & _value_ok(d, p)
@@ -87,12 +139,30 @@ def pullback_bb_mid(d, p):
         & (bw >= p["min_bandwidth"])
         & (c > mid)
     )
+    if p["min_ext_pct"] > 0 or p["need_first_touch"]:
+        peak, touches = peak_and_touches(d, mid, p["peak_window"])
+        if p["min_ext_pct"] > 0:
+            m &= peak * 100 >= p["min_ext_pct"]
+        if p["need_first_touch"]:
+            m &= touches == 0
+    if p["need_from_above"]:
+        m &= (c.shift(1) > mid) & (c < c.shift(1))
+    return m
+
+
+def pullback_bb_mid_extras(d, p):
+    mid, _, up = bollinger(d, 20, 2)
+    hit_upper = (d["High"] > up).astype(float).rolling(int(p["peak_window"])).max().shift(1) == 1
+    return {
+        "Jarak ke garis (%)": (d["Close"] / mid - 1) * 100,
+        "Pernah tembus BB atas": hit_upper,
+    }
 
 
 def bb_reversal(d, p):
     _, bottom, _ = bollinger(d, 20, 2)
-    c = d["Close"]
-    return (
+    c, o = d["Close"], d["Open"]
+    m = (
         (d["Low"].shift(1) < bottom)
         & (c.shift(1) < bottom)
         & (c > bottom)
@@ -101,6 +171,13 @@ def bb_reversal(d, p):
         & (d["High"].shift(1) < d["High"])
         & (c > c.shift(1))
     )
+    if p["need_body"]:
+        m &= (c - o).abs() > (c.shift(1) - o.shift(1)).abs()
+    return m
+
+
+def bb_reversal_extras(d, p):
+    return {"Low lebih tinggi dari kemarin": d["Low"] > d["Low"].shift(1)}
 
 
 def magic_v11(d, p):
@@ -137,34 +214,49 @@ def magic_v21(d, p):
     )
 
 
+def magic_continuation_extras(d, p):
+    c, o, h = d["Close"], d["Open"], d["High"]
+    body = (c - o).abs()
+    return {
+        "Close=High (≤0,5%)": c >= h * 0.995,
+        "Candle lebih kuat dari kemarin": body > body.shift(1),
+        "Volume > 1,5x rata-rata 20 hari": d["Volume"] > 1.5 * d["Volume"].rolling(20).mean(),
+    }
+
+
+def magic_reversal_extras(d, p):
+    c, o, l = d["Close"], d["Open"], d["Low"]
+    body = (c - o).abs()
+    lower_wick = d[["Open", "Close"]].min(axis=1) - l
+    return {"Ekor bawah panjang (≥2x body)": (lower_wick > 0) & (lower_wick >= 2 * body)}
+
+
 # ------------------------------------------------------------------ parameter
 _VAL = lambda default: Param("Nilai transaksi hari ini min (Rp miliar)", default, 0.5, "%.1f")  # noqa: E731
 _TOL_LO = lambda default: Param("Batas bawah (x garis)", default, 0.005, "%.3f")  # noqa: E731
 _TOL_HI = lambda default: Param("Batas atas (x garis)", default, 0.005, "%.3f")  # noqa: E731
+_YN = lambda label, default: Param(f"{label} (1 = ya, 0 = tidak)", default, 1, "%.0f")  # noqa: E731
+
+
+def _ma_params(period: int, ext_pct: float, window: int) -> dict:
+    return {
+        "ma_period": Param("Periode MA", period, 1, "%.0f"),
+        "ma_type": Param("Jenis garis (0 = SMA, 1 = EMA)", 0, 1, "%.0f"),
+        "llv_days": Param("Low terendah N hari (kemarin) di atas MA", 5, 1, "%.0f"),
+        "low_tol": _TOL_LO(0.99),
+        "high_tol": _TOL_HI(1.02),
+        "min_value": _VAL(1.0),
+        "need_trend": _YN("Wajib MA50 > MA200", 1),
+        "min_ext_pct": Param("Naik tinggi sebelumnya: High min x% di atas garis (0 = abaikan)", ext_pct, 1, "%.0f"),
+        "peak_window": Param("Cari puncak dalam N hari terakhir", window, 5, "%.0f"),
+        "need_first_touch": _YN("Wajib sentuhan pertama sejak puncak", 1),
+        "need_from_above": _YN("Wajib datang dari atas (close kemarin > garis & close turun)", 1),
+    }
+
 
 PRESETS: list[Preset] = [
-    Preset(
-        "Pullback MA50",
-        pullback_ma,
-        {
-            "ma_period": Param("Periode MA", 50, 1, "%.0f"),
-            "llv_days": Param("Low terendah N hari (kemarin) di atas MA", 5, 1, "%.0f"),
-            "low_tol": _TOL_LO(0.99),
-            "high_tol": _TOL_HI(1.02),
-            "min_value": _VAL(1.0),
-        },
-    ),
-    Preset(
-        "Pullback MA200",
-        pullback_ma,
-        {
-            "ma_period": Param("Periode MA", 200, 1, "%.0f"),
-            "llv_days": Param("Low terendah N hari (kemarin) di atas MA", 5, 1, "%.0f"),
-            "low_tol": _TOL_LO(0.99),
-            "high_tol": _TOL_HI(1.02),
-            "min_value": _VAL(1.0),
-        },
-    ),
+    Preset("Pullback MA50", pullback_ma, _ma_params(50, 15, 60), extras=pullback_ma_extras),
+    Preset("Pullback MA200", pullback_ma, _ma_params(200, 25, 120), extras=pullback_ma_extras),
     Preset(
         "Pullback BB Mid",
         pullback_bb_mid,
@@ -173,13 +265,24 @@ PRESETS: list[Preset] = [
             "high_tol": _TOL_HI(1.02),
             "min_bandwidth": Param("Bandwidth Bollinger minimum", 0.10, 0.01, "%.2f"),
             "min_value": _VAL(1.0),
+            "min_ext_pct": Param("Naik tinggi sebelumnya: High min x% di atas BB mid (0 = abaikan)", 8, 1, "%.0f"),
+            "peak_window": Param("Cari puncak dalam N hari terakhir", 30, 5, "%.0f"),
+            "need_first_touch": _YN("Wajib sentuhan pertama ke BB mid sejak puncak", 1),
+            "need_from_above": _YN("Wajib datang dari atas (close kemarin > BB mid & close turun)", 1),
         },
+        extras=pullback_bb_mid_extras,
     ),
-    Preset("BB Reversal", bb_reversal, {"min_value": _VAL(1.0)}),
+    Preset(
+        "BB Reversal",
+        bb_reversal,
+        {"min_value": _VAL(1.0), "need_body": _YN("Wajib body candle > body kemarin", 1)},
+        extras=bb_reversal_extras,
+    ),
     Preset(
         "Magic V1.1 & V1.3",
         magic_v11,
         {"sma_period": Param("Periode SMA", 5, 1, "%.0f"), "min_value": _VAL(5.0)},
+        extras=magic_continuation_extras,
     ),
     Preset(
         "Magic V1.2",
@@ -189,6 +292,7 @@ PRESETS: list[Preset] = [
             "jump": Param("High 2 hari lalu / close 3 hari lalu min", 1.10, 0.01, "%.2f"),
             "min_value": _VAL(1.0),
         },
+        extras=magic_reversal_extras,
     ),
     Preset(
         "Magic V2.1",
@@ -198,6 +302,7 @@ PRESETS: list[Preset] = [
             "high_jump": Param("High hari ini / close kemarin min", 1.10, 0.01, "%.2f"),
             "min_value": _VAL(5.0),
         },
+        extras=magic_continuation_extras,
     ),
 ]
 

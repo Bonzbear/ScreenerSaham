@@ -82,23 +82,125 @@ def test_same_day_tp_sl_is_loss():
 
 
 def test_engine_flow():
+    from .engine import Strategy
+    from .screener import signal_mask
     prices = {f"T{i}.JK": make_prices(i) for i in range(30)}
     prices["ILLIQ.JK"] = make_prices(99, liquid=False)
     last = max(df.index[-1] for df in prices.values())
     crit = dict(DEFAULT_CRITERIA, min_avg_value=1e9, min_value_today=1e9)
-    cand, trades, o = run(prices, last, crit, BacktestParams(tp_pct=1.5, hold_days=2), 365)
+    st = [Strategy("-", lambda d: signal_mask(d, crit), BacktestParams(tp_pct=1.5, hold_days=2))]
+    cand, trades = run(prices, last, st, 365)
     assert not trades.empty and "ILLIQ.JK" not in set(trades.Ticker)
     assert trades.Date.max() < last           # tidak ada kebocoran masa depan
-    assert o["n"] == len(trades) and 0 <= o["winrate"] <= 100
-    print("OK engine:", o["n"], "sinyal, winrate", round(o["winrate"], 1), "kandidat", len(cand))
-    # tanggal di masa lalu tidak boleh memakai data setelahnya
+    assert set(trades.Screener) == {"-"}
+    print("OK engine:", len(trades), "sinyal, kandidat", len(cand))
     past = prices["T0.JK"].index[200]
-    _, tr2, _ = run(prices, past, crit, BacktestParams(), 365)
+    _, tr2 = run(prices, past, st, 365)
     assert tr2.empty or tr2.Date.max() < past
     print("OK tanpa look-ahead")
+
+
+# ------------------------------------------------------------ paket vs hitungan naif
+def naive_preset(name, d, p):
+    """Terapkan rumus apa adanya, satu baris per satu baris (tanpa rolling/shift pandas)."""
+    C, H, L, V, Val = (d[c].to_numpy(float) for c in ["Close", "High", "Low", "Volume", "Value"])
+    n = len(d)
+    out = np.zeros(n, bool)
+
+    def sma(i, k):
+        k = int(k)
+        return C[i - k + 1:i + 1].mean() if i >= k - 1 else np.nan
+
+    def ema_series(k):
+        k = int(k); a = 2 / (k + 1)
+        e = np.empty(n); e[0] = C[0]
+        for i in range(1, n):
+            e[i] = a * C[i] + (1 - a) * e[i - 1]
+        e[:k - 1] = np.nan
+        return e
+
+    def bb(i, k=20, m=2.0):
+        w = C[i - k + 1:i + 1]
+        mid, sd = w.mean(), w.std()
+        return mid, mid - m * sd, mid + m * sd
+
+    e10, e20, e50 = ema_series(10), ema_series(20), ema_series(50)
+    val_ok = lambda i: Val[i] > p["min_value"] * 1e9
+    for i in range(n):
+        try:
+            if name.startswith("Pullback MA"):
+                k, ld = int(p["ma_period"]), int(p["llv_days"])
+                if i < k - 1 or i - ld < 0:
+                    continue
+                ma = sma(i, k)
+                prev_llv = L[i - ld:i].min()
+                out[i] = prev_llv > ma and p["low_tol"] * ma <= C[i] <= p["high_tol"] * ma and val_ok(i)
+            elif name == "Pullback BB Mid":
+                if i < 49:
+                    continue
+                mid, lo, up = bb(i)
+                out[i] = (p["low_tol"] * mid <= C[i] <= p["high_tol"] * mid and val_ok(i) and e10[i] > e20[i]
+                          and e20[i] > e50[i] and (up - lo) / mid >= p["min_bandwidth"] and C[i] > mid)
+            elif name == "BB Reversal":
+                if i < 20:
+                    continue
+                _, bot, _ = bb(i)
+                out[i] = (L[i - 1] < bot and C[i - 1] < bot and C[i] > bot and val_ok(i)
+                          and V[i] > V[i - 1] and H[i - 1] < H[i] and C[i] > C[i - 1])
+            elif name == "Magic V1.1 & V1.3":
+                if i < 1:
+                    continue
+                out[i] = V[i] > V[i - 1] and C[i - 1] < C[i] and C[i] > sma(i, p["sma_period"]) and val_ok(i)
+            elif name == "Magic V1.2":
+                if i < 3:
+                    continue
+                s5 = sma(i, p["sma_period"])
+                out[i] = (C[i] > s5 and C[i - 1] > s5 and C[i - 2] > s5 and H[i - 2] / C[i - 3] >= p["jump"]
+                          and C[i - 1] < C[i - 2] and C[i] < C[i - 1] and val_ok(i))
+            elif name == "Magic V2.1":
+                if i < 1:
+                    continue
+                out[i] = (V[i] > V[i - 1] and C[i - 1] < C[i] and C[i] > sma(i, p["sma_period"]) and val_ok(i)
+                          and H[i] / C[i - 1] >= p["high_jump"])
+        except FloatingPointError:
+            pass
+    return out
+
+
+def test_presets_match_naive():
+    from .presets import PRESETS
+    loose = {"min_value": 0.001, "low_tol": 0.90, "high_tol": 1.10, "min_bandwidth": 0.0,
+             "jump": 1.02, "high_jump": 1.01, "llv_days": 3}
+    totals = {p.name: 0 for p in PRESETS}
+    for seed in range(8):
+        d = prepare(make_prices(seed, n=700))
+        for pr in PRESETS:
+            p = pr.defaults()
+            p.update({k: v for k, v in loose.items() if k in p})
+            fast = pr.mask(d, p).fillna(False).to_numpy(bool)
+            slow = naive_preset(pr.name, d, p)
+            assert (fast == slow).all(), (pr.name, seed, np.flatnonzero(fast != slow)[:5])
+            totals[pr.name] += int(fast.sum())
+    assert all(v > 0 for v in totals.values()), totals  # pastikan tes tidak kosong
+    print("OK paket == hitungan naif; jumlah sinyal uji:", totals)
+
+
+def test_presets_default_params_run():
+    from .presets import PRESETS
+    from .engine import strategy_from_preset
+    prices = {f"T{i}.JK": make_prices(i, n=700) for i in range(10)}
+    last = max(df.index[-1] for df in prices.values())
+    sts = [strategy_from_preset(p, None, BacktestParams(tp_pct=p.tp_pct, sl_pct=p.sl_pct, hold_days=p.hold_days)) for p in PRESETS]
+    cand, trades = run(prices, last, sts, 600)
+    assert set(trades.Screener).issubset({p.name for p in PRESETS})
+    s = strategy_from_preset(PRESETS[0], {"min_value": 2.0}, BacktestParams())
+    assert s.name.endswith("(diubah)")
+    print("OK semua paket jalan;", len(trades), "transaksi")
 
 
 if __name__ == "__main__":
     test_simulate_matches_naive()
     test_same_day_tp_sl_is_loss()
     test_engine_flow()
+    test_presets_match_naive()
+    test_presets_default_params_run()

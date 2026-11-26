@@ -57,5 +57,5 @@ def signal_mask(d: pd.DataFrame, c: dict) -> pd.Series:
     if c["need_price_up"]:
         m &= d["Close"] > d["PrevClose"]
     if c["need_above_sma"]:
-        m &= d["Close"] > d["SMA"]
+        m &= d["Close"] > d["Close"].rolling(int(c["sma_period"])).mean()
     return m.fillna(False)

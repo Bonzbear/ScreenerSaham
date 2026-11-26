@@ -74,14 +74,74 @@ def format_telegram(df: pd.DataFrame) -> str:
     return msg
 
 
+def merge_duplicates(cand: pd.DataFrame) -> pd.DataFrame:
+    """Satu baris per saham. Baris yang dipakai = paket dengan peringkat tertinggi
+    (cand sudah terurut: sampel cukup dulu, lalu winrate, lalu jumlah sinyal).
+    Paket lain yang juga meloloskan saham itu ditulis di kolom 'Paket lain'."""
+    if cand.empty or cand["Ticker"].is_unique:
+        return cand.assign(**{"Jml paket": 1, "Paket lain": ""}) if not cand.empty else cand
+    rows = []
+    for _, g in cand.groupby("Ticker", sort=False):  # urutan kemunculan pertama = peringkat terbaik
+        best = g.iloc[0].copy()
+        others = [
+            f"{r['Screener']} ({'-' if pd.isna(r['Winrate (%)']) else format(r['Winrate (%)'], 'g') + '%'}, {int(r['Sinyal lalu'])}x)"
+            for _, r in g.iloc[1:].iterrows()
+        ]
+        best["Jml paket"] = len(g)
+        best["Paket lain"] = " · ".join(others)
+        rows.append(best)
+    out = pd.DataFrame(rows).reset_index(drop=True)
+    out["Rank"] = range(1, len(out) + 1)
+    cols = list(out.columns)
+    cols.insert(cols.index("Screener") + 1, cols.pop(cols.index("Jml paket")))
+    return out[cols]
+
+
 @st.cache_resource(show_spinner="Membaca data tersimpan...")
 def cached_prices(mtime: float, tickers_key: tuple):
     return dm.load_prices(list(tickers_key))
 
 
 # ------------------------------------------------------------------ sidebar
+def cache_age():
+    """(waktu unduh terakhir WIB, umur dalam menit) dari file cache; (None, None) bila belum ada."""
+    mt = dm.cache_mtime()
+    if not mt:
+        return None, None
+    t = dt.datetime.fromtimestamp(mt, WIB)
+    return t, (dt.datetime.now(WIB) - t).total_seconds() / 60
+
+
+def do_update() -> str:
+    bar = st.progress(0.0, text="Memulai...")
+    info = dm.update_prices(dm.load_tickers(), progress=lambda f, t: bar.progress(min(f, 1.0), text=t))
+    bar.empty()
+    st.cache_resource.clear()
+    msg = f"Data diperbarui: {info['tickers_in_cache']} saham di cache, {info['no_data']} kode tanpa data Yahoo."
+    if info["failed_chunks"]:
+        msg += f" ⚠️ {info['failed_chunks']} batch gagal diunduh (rate limit?) — coba perbarui lagi."
+    return msg
+
+
+def check_yahoo_lag(symbol: str = "BBCA.JK"):
+    """Jam candle 1 menit terakhir yang diberikan Yahoo untuk satu saham likuid. (ts WIB, error)"""
+    try:
+        import yfinance as yf
+
+        h = yf.Ticker(symbol).history(period="1d", interval="1m")
+        if h is None or h.empty:
+            return None, "Yahoo tidak mengembalikan data 1 menit (bursa tutup / data kosong)."
+        ts = pd.Timestamp(h.index[-1])
+        ts = ts.tz_localize(WIB) if ts.tzinfo is None else ts.tz_convert(WIB)
+        return ts.to_pydatetime(), None
+    except Exception as e:  # noqa: BLE001
+        return None, f"Gagal mengecek: {e}"
+
+
 sb = st.sidebar
 sb.header("Pengaturan")
+if msg := st.session_state.pop("update_msg", None):
+    st.success(msg)
 
 tickers = dm.load_tickers()
 with sb.expander(f"Daftar saham ({len(tickers)})"):
@@ -91,13 +151,16 @@ with sb.expander(f"Daftar saham ({len(tickers)})"):
         st.success(f"{len(tickers)} saham disimpan. Klik 'Perbarui data' untuk mengunduh saham baru.")
 
 if sb.button("🔄 Perbarui data Yahoo"):
-    bar = st.progress(0.0, text="Memulai...")
-    info = dm.update_prices(tickers, progress=lambda f, t: bar.progress(min(f, 1.0), text=t))
-    bar.empty()
-    st.cache_resource.clear()
-    if info["failed_chunks"]:
-        st.warning(f"{info['failed_chunks']} batch gagal diunduh (rate limit?). Coba perbarui lagi nanti.")
-    st.success(f"Data diperbarui: {info['tickers_in_cache']} saham di cache, {info['no_data']} kode tanpa data Yahoo.")
+    st.success(do_update())
+
+if sb.button("🕒 Cek jam data Yahoo"):
+    ts, err = check_yahoo_lag()
+    if err:
+        sb.warning(err)
+    else:
+        lag = (dt.datetime.now(WIB) - ts).total_seconds() / 60
+        sb.info(f"Candle 1 menit terakhir (BBCA): {ts:%H:%M} WIB • sekarang {dt.datetime.now(WIB):%H:%M} WIB "
+                f"→ tertinggal ± {lag:.0f} menit.")
 
 # --- pilihan paket
 st.session_state.setdefault("tp", 1.5)
@@ -201,10 +264,24 @@ if not eff_candidates:
 effective = eff_candidates[-1]
 if effective.date() != chosen:
     st.caption(f"{chosen} bukan hari bursa → memakai {effective.date()}.")
-st.caption(f"Data terakhir di cache: {latest.date()} • {len(prices)} saham")
+fetched, age = cache_age()
+st.caption(
+    f"Data terakhir di cache: {latest.date()} • {len(prices)} saham • "
+    f"diunduh dari Yahoo pukul {fetched:%H:%M} WIB ({age:.0f} menit lalu). Yahoo sendiri menunda data IDX ± 10 menit."
+)
+live_open = use_live and latest == today and not market_is_final(now)
+if live_open and age > 5:
+    st.info(f"Data diunduh {age:.0f} menit lalu. Klik **Perbarui data lalu jalankan** supaya harga terbaru ikut terhitung.")
 
 # --------------------------------------------------------------------- run
-if st.button("▶️ Jalankan Screener", type="primary"):
+b1, b2, _ = st.columns([1, 1.3, 3])
+run_click = b1.button("▶️ Jalankan Screener", type="primary")
+if b2.button("🔄 Perbarui data lalu jalankan"):
+    st.session_state["update_msg"] = do_update()
+    st.session_state["pending_run"] = True
+    st.rerun()
+
+if run_click or st.session_state.pop("pending_run", False):
     if sel == ALL:
         strategies = [strategy_from_preset(p, None, bt_params(p.tp_pct, p.sl_pct, p.hold_days)) for p in PRESETS]
     elif preset is not None:
@@ -224,8 +301,18 @@ if res:
     if cand.empty:
         st.warning("Tidak ada saham yang memenuhi kriteria pada tanggal ini.")
     else:
-        st.success(f"{len(cand)} sinyal ditemukan.")
-        show = cand.copy()
+        merge = False
+        if cand["Ticker"].duplicated().any():
+            merge = st.checkbox(
+                "Satu baris per saham (tampilkan paket peringkat terbaik; paket lain di kolom 'Paket lain')",
+                value=True,
+            )
+        view = merge_duplicates(cand) if merge else cand
+        if merge:
+            st.success(f"{len(view)} saham lolos ({len(cand)} sinyal dari seluruh paket).")
+        else:
+            st.success(f"{len(view)} sinyal ditemukan.")
+        show = view.copy()
         show["Kirim"] = False
         edited = st.data_editor(
             show, hide_index=True,

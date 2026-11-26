@@ -1,0 +1,8 @@
+# Daftar saham (kode tanpa .JK sudah cukup). Satu per baris atau dipisah koma.
+# GANTI isi file ini dengan daftar lengkapmu: tempel langsung list dari kode lama
+# (yang berisi 'AALI.JK', 'ABBA.JK', ...), tanda kutip dan koma tidak masalah.
+# Bisa juga diedit lewat sidebar aplikasi (menu "Daftar saham").
+BBCA, BBRI, BMRI, BBNI, TLKM, ASII, UNVR, ICBP, INDF, KLBF
+ANTM, MDKA, ADRO, PTBA, ITMG, PGAS, MEDC, AKRA, CPIN, JPFA
+SMGR, INTP, EXCL, ISAT, TOWR, BRIS, ARTO, GOTO, BUKA, EMTK
+AMMN, BREN, CUAN, BRPT, TPIA, PANI, MAPI, ACES, ERAA, HRUM

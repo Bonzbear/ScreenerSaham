@@ -14,9 +14,9 @@ import streamlit as st
 
 from screener_baru import data as dm
 from screener_baru.backtest import BacktestParams
-from screener_baru.engine import MIN_SAMPLE, Strategy, run, strategy_from_preset
+from screener_baru.engine import MIN_SAMPLE, Strategy, active_dates, align, run, strategy_from_preset
 from screener_baru.presets import PRESET_BY_NAME, PRESETS
-from screener_baru.screener import DEFAULT_CRITERIA, signal_mask
+from screener_baru.screener import DEFAULT_CRITERIA, prepare, signal_mask
 
 WIB = ZoneInfo("Asia/Jakarta")
 MARKET_FINAL = dt.time(16, 15)  # setelah jam ini candle hari itu dianggap final (ubah bila perlu)
@@ -337,3 +337,45 @@ if res:
         with st.expander("Daftar transaksi backtest"):
             st.dataframe(trades)
             st.download_button("Unduh CSV", trades.to_csv(index=False).encode(), "trades.csv", "text/csv")
+
+
+# ------------------------------------------------------------ periksa saham
+with st.expander("🔍 Periksa saham — kenapa lolos / tidak lolos"):
+    names = [p.name for p in PRESETS]
+    k1, k2 = st.columns([1, 2])
+    code = k1.text_input("Kode saham", key="dbg_code", placeholder="mis. CSMI").strip().upper()
+    pname = k2.selectbox("Paket", names, index=names.index(sel) if sel in names else 0, key="dbg_preset")
+    if code:
+        tkr = code if code.endswith(".JK") else code + ".JK"
+        raw = prices_view.get(tkr)
+        if raw is None or raw.loc[:effective].empty:
+            st.warning(f"{tkr} tidak ada di data. Pastikan kodenya ada di Daftar saham lalu klik Perbarui data.")
+        else:
+            raw_cut = raw.loc[:effective]
+            act = active_dates(prices_view)
+            d = prepare(align(raw_cut, act[act <= effective]))
+            pr = PRESET_BY_NAME[pname]
+            vals = {**pr.defaults(), **(values if (preset is not None and preset.name == pname) else {})}
+            zero60 = int((raw_cut["Volume"].tail(60) == 0).sum())
+            st.caption(
+                f"Data mentah Yahoo: {len(raw_cut)} baris, terakhir {raw_cut.index[-1].date()}. "
+                f"Setelah disamakan dengan hari bursa: {len(d)} baris. "
+                f"Hari volume 0 di 60 baris terakhir (data Yahoo): {zero60}."
+            )
+            if d.index[-1] != effective:
+                st.warning(f"Tidak ada candle {effective.date()} untuk saham ini (suspend/libur) — tidak bisa jadi kandidat.")
+            conds = pr.conditions(d, vals)
+            tbl = pd.DataFrame(
+                [{"Syarat": lbl, "Hasil": "✅" if bool(s_.iloc[-1]) else "❌"} for lbl, s_ in conds]
+            )
+            lolos = bool(tbl["Hasil"].eq("✅").all()) and d["Volume"].iloc[-1] > 0
+            (st.success if lolos else st.error)(
+                f"{code} {'LOLOS' if lolos else 'TIDAK lolos'} paket {pname} pada {d.index[-1].date()}"
+                + ("" if d["Volume"].iloc[-1] > 0 else " (volume hari ini 0)")
+            )
+            st.dataframe(tbl, hide_index=True)
+            show_cols = d[["Open", "High", "Low", "Close", "Volume"]].copy()
+            for n_ in (5, 20, 50, 200):
+                show_cols[f"SMA{n_}"] = d["Close"].rolling(n_).mean().round(1)
+            st.caption("15 hari terakhir + rata-rata bergerak. Bandingkan SMA50/SMA200 dengan chart sekuritasmu.")
+            st.dataframe(show_cols.tail(15).iloc[::-1])

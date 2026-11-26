@@ -15,6 +15,32 @@ MIN_SAMPLE = 10  # di bawah ini winrate per saham dianggap sampel kecil
 TRADE_COLS_S = ["Ticker", "Screener"] + TRADE_COLS[1:]
 
 
+def active_dates(prices: dict, min_frac: float = 0.2, min_count: int = 5) -> pd.DatetimeIndex:
+    """Hari bursa = tanggal saat cukup banyak saham bertransaksi (membuang baris libur dari Yahoo)."""
+    parts = [df.index[df["Volume"] > 0].to_numpy() for df in prices.values() if len(df)]
+    if not parts:
+        return pd.DatetimeIndex([])
+    cnt = pd.Series(np.concatenate(parts)).value_counts()
+    thr = min(max(min_count, min_frac * len(prices)), len(prices))
+    return pd.DatetimeIndex(cnt[cnt >= thr].index).sort_values()
+
+
+def align(df: pd.DataFrame, active: pd.DatetimeIndex) -> pd.DataFrame:
+    """Samakan dengan chart sekuritas: setiap hari bursa ada satu candle. Hari tanpa transaksi
+    diisi harga penutupan sebelumnya dengan Volume 0; baris libur (volume 0 di luar hari bursa) dibuang."""
+    df = df[~df.index.duplicated(keep="last")].sort_index()
+    if df.empty:
+        return df
+    keep = df.index[df["Volume"].fillna(0) > 0]
+    idx = active[(active >= df.index[0]) & (active <= df.index[-1])].union(keep)
+    out = df.reindex(idx)
+    out["Close"] = out["Close"].ffill()
+    for col in ("Open", "High", "Low"):
+        out[col] = out[col].fillna(out["Close"])
+    out["Volume"] = out["Volume"].fillna(0)
+    return out.dropna(subset=["Close"])
+
+
 @dataclass
 class Strategy:
     name: str                                   # tampil di kolom "Screener" ("-" untuk manual)
@@ -45,16 +71,19 @@ def run(
     screen_date = pd.Timestamp(screen_date).normalize()
     start = screen_date - pd.Timedelta(days=lookback_days)
 
+    active = active_dates(prices)
+    active = active[active <= screen_date]
     trade_frames, cands = [], []
     for ticker, raw in prices.items():
-        df = raw.loc[:screen_date]
+        df = align(raw.loc[:screen_date], active)
         if len(df) < 30:
             continue
         d = prepare(df)
         if len(d) < 30:
             continue
         for s in strategies:
-            mask = s.mask(d).fillna(False).to_numpy(bool)
+            # tidak ada sinyal (dan entry) pada hari tanpa transaksi
+            mask = s.mask(d).fillna(False).to_numpy(bool) & (d["Volume"].to_numpy() > 0)
             pos = np.flatnonzero(mask & (d.index >= start))
             tr = simulate(d, pos, s.bt)
             if not tr.empty:

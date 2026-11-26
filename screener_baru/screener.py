@@ -26,8 +26,9 @@ def ara_limit(prev_close: pd.Series) -> np.ndarray:
 
 
 def prepare(df: pd.DataFrame, sma_period: int = 5) -> pd.DataFrame:
-    d = df.sort_index().dropna(subset=["Open", "High", "Low", "Close", "Volume"])
-    d = d[d["Volume"] > 0].copy()
+    # Hari tanpa transaksi (Volume 0) SENGAJA tetap dipakai supaya MA sama dengan chart sekuritas
+    # (saham tipis sering tidak transaksi berhari-hari). Sinyal pada hari volume 0 dicegah di engine.
+    d = df.sort_index().dropna(subset=["Open", "High", "Low", "Close", "Volume"]).copy()
     d["SMA"] = d["Close"].rolling(sma_period).mean()
     d["VOLMA20"] = d["Volume"].rolling(20).mean()
     d["Value"] = d["Close"] * d["Volume"]

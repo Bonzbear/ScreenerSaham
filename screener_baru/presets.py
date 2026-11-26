@@ -49,6 +49,8 @@ class Preset:
     # extras(d, p) -> {nama: Series}. Series bool = Bonus (ditulis di kolom "Bonus"),
     # Series angka = kolom informasi tambahan.
     extras: Optional[Callable[[pd.DataFrame, dict], dict]] = None
+    # conditions(d, p) -> [(label, Series bool), ...]; dipakai panel "Periksa saham"
+    conditions: Optional[Callable[[pd.DataFrame, dict], list]] = None
 
     def defaults(self) -> dict:
         return {k: v.default for k, v in self.params.items()}
@@ -103,22 +105,36 @@ def _value_ok(d, p):
 
 
 # --------------------------------------------------------------------- rumus
-def pullback_ma(d, p):
+# Tiap paket ditulis sebagai daftar syarat bernama [(label, Series bool), ...]; sinyal = semua syarat terpenuhi.
+def _all_of(conds):
+    m = None
+    for _, s in conds:
+        s = s.fillna(False).astype(bool)
+        m = s if m is None else (m & s)
+    return m
+
+
+def pullback_ma_conds(d, p):
     ma = line(d, p["ma_period"], p["ma_type"])
     c = d["Close"]
     prev_llv = d["Low"].rolling(int(p["llv_days"])).min().shift(1)
-    m = (prev_llv > ma) & (c >= ma * p["low_tol"]) & (c <= ma * p["high_tol"]) & _value_ok(d, p)
+    conds = [
+        ("Low terendah N hari (sampai kemarin) di atas MA", prev_llv > ma),
+        ("Close ≥ batas bawah × MA", c >= ma * p["low_tol"]),
+        ("Close ≤ batas atas × MA", c <= ma * p["high_tol"]),
+        ("Nilai transaksi hari ini cukup", _value_ok(d, p)),
+    ]
     if p["need_trend"]:
-        m &= line(d, 50, p["ma_type"]) > line(d, 200, p["ma_type"])
+        conds.append(("MA50 > MA200", line(d, 50, p["ma_type"]) > line(d, 200, p["ma_type"])))
     if p["min_ext_pct"] > 0 or p["need_first_touch"]:
         peak, touches = peak_and_touches(d, ma, p["peak_window"])
         if p["min_ext_pct"] > 0:
-            m &= peak * 100 >= p["min_ext_pct"]
+            conds.append(("Naik tinggi sebelumnya (puncak ≥ x% di atas MA)", peak * 100 >= p["min_ext_pct"]))
         if p["need_first_touch"]:
-            m &= touches == 0
+            conds.append(("Sentuhan pertama sejak puncak", touches == 0))
     if p["need_from_above"]:
-        m &= (c.shift(1) > ma) & (c < c.shift(1))
-    return m
+        conds.append(("Datang dari atas (close kemarin > MA & close turun)", (c.shift(1) > ma) & (c < c.shift(1))))
+    return conds
 
 
 def pullback_ma_extras(d, p):
@@ -126,28 +142,28 @@ def pullback_ma_extras(d, p):
     return {"Jarak ke garis (%)": (d["Close"] / ma - 1) * 100}
 
 
-def pullback_bb_mid(d, p):
+def pullback_bb_mid_conds(d, p):
     mid, low, up = bollinger(d, 20, 2)
     bw = (up - low) / mid
     c = d["Close"]
-    m = (
-        (c >= mid * p["low_tol"])
-        & (c <= mid * p["high_tol"])
-        & _value_ok(d, p)
-        & (ema(d, 10) > ema(d, 20))
-        & (ema(d, 20) > ema(d, 50))
-        & (bw >= p["min_bandwidth"])
-        & (c > mid)
-    )
+    conds = [
+        ("Close ≥ batas bawah × BB mid", c >= mid * p["low_tol"]),
+        ("Close ≤ batas atas × BB mid", c <= mid * p["high_tol"]),
+        ("Nilai transaksi hari ini cukup", _value_ok(d, p)),
+        ("EMA10 > EMA20", ema(d, 10) > ema(d, 20)),
+        ("EMA20 > EMA50", ema(d, 20) > ema(d, 50)),
+        ("Bandwidth Bollinger cukup", bw >= p["min_bandwidth"]),
+        ("Close > BB mid", c > mid),
+    ]
     if p["min_ext_pct"] > 0 or p["need_first_touch"]:
         peak, touches = peak_and_touches(d, mid, p["peak_window"])
         if p["min_ext_pct"] > 0:
-            m &= peak * 100 >= p["min_ext_pct"]
+            conds.append(("Naik tinggi sebelumnya (puncak ≥ x% di atas BB mid)", peak * 100 >= p["min_ext_pct"]))
         if p["need_first_touch"]:
-            m &= touches == 0
+            conds.append(("Sentuhan pertama ke BB mid sejak puncak", touches == 0))
     if p["need_from_above"]:
-        m &= (c.shift(1) > mid) & (c < c.shift(1))
-    return m
+        conds.append(("Datang dari atas (close kemarin > BB mid & close turun)", (c.shift(1) > mid) & (c < c.shift(1))))
+    return conds
 
 
 def pullback_bb_mid_extras(d, p):
@@ -159,59 +175,54 @@ def pullback_bb_mid_extras(d, p):
     }
 
 
-def bb_reversal(d, p):
+def bb_reversal_conds(d, p):
     _, bottom, _ = bollinger(d, 20, 2)
     c, o = d["Close"], d["Open"]
-    m = (
-        (d["Low"].shift(1) < bottom)
-        & (c.shift(1) < bottom)
-        & (c > bottom)
-        & _value_ok(d, p)
-        & (d["Volume"] > d["Volume"].shift(1))
-        & (d["High"].shift(1) < d["High"])
-        & (c > c.shift(1))
-    )
+    conds = [
+        ("Low kemarin < BB bawah", d["Low"].shift(1) < bottom),
+        ("Close kemarin < BB bawah", c.shift(1) < bottom),
+        ("Close hari ini > BB bawah", c > bottom),
+        ("Nilai transaksi hari ini cukup", _value_ok(d, p)),
+        ("Volume > volume kemarin", d["Volume"] > d["Volume"].shift(1)),
+        ("High kemarin < High hari ini", d["High"].shift(1) < d["High"]),
+        ("Close > close kemarin", c > c.shift(1)),
+    ]
     if p["need_body"]:
-        m &= (c - o).abs() > (c.shift(1) - o.shift(1)).abs()
-    return m
+        conds.append(("Body candle > body kemarin", (c - o).abs() > (c.shift(1) - o.shift(1)).abs()))
+    return conds
 
 
 def bb_reversal_extras(d, p):
     return {"Low lebih tinggi dari kemarin": d["Low"] > d["Low"].shift(1)}
 
 
-def magic_v11(d, p):
+def magic_v11_conds(d, p):
     c = d["Close"]
-    return (
-        (d["Volume"] > d["Volume"].shift(1))
-        & (c.shift(1) < c)
-        & (c > sma(d, p["sma_period"]))
-        & _value_ok(d, p)
-    )
+    return [
+        ("Volume > volume kemarin", d["Volume"] > d["Volume"].shift(1)),
+        ("Close kemarin < close hari ini", c.shift(1) < c),
+        ("Close > SMA", c > sma(d, p["sma_period"])),
+        ("Nilai transaksi hari ini cukup", _value_ok(d, p)),
+    ]
 
 
-def magic_v12(d, p):
+def magic_v12_conds(d, p):
     c, s5 = d["Close"], sma(d, p["sma_period"])
-    return (
-        (c > s5)
-        & (c.shift(1) > s5)
-        & (c.shift(2) > s5)
-        & (d["High"].shift(2) / c.shift(3) >= p["jump"])
-        & (c.shift(1) < c.shift(2))
-        & (c < c.shift(1))
-        & _value_ok(d, p)
-    )
+    return [
+        ("Close > SMA", c > s5),
+        ("Close kemarin > SMA", c.shift(1) > s5),
+        ("Close 2 hari lalu > SMA", c.shift(2) > s5),
+        ("High 2 hari lalu / close 3 hari lalu ≥ batas", d["High"].shift(2) / c.shift(3) >= p["jump"]),
+        ("Close kemarin < close 2 hari lalu", c.shift(1) < c.shift(2)),
+        ("Close hari ini < close kemarin", c < c.shift(1)),
+        ("Nilai transaksi hari ini cukup", _value_ok(d, p)),
+    ]
 
 
-def magic_v21(d, p):
-    c = d["Close"]
-    return (
-        (d["Volume"] > d["Volume"].shift(1))
-        & (c.shift(1) < c)
-        & (c > sma(d, p["sma_period"]))
-        & _value_ok(d, p)
-        & (d["High"] / c.shift(1) >= p["high_jump"])
-    )
+def magic_v21_conds(d, p):
+    return magic_v11_conds(d, p) + [
+        ("High hari ini / close kemarin ≥ batas", d["High"] / d["Close"].shift(1) >= p["high_jump"]),
+    ]
 
 
 def magic_continuation_extras(d, p):
@@ -254,12 +265,16 @@ def _ma_params(period: int, ext_pct: float, window: int) -> dict:
     }
 
 
+def _preset(name, conds_fn, params, **kw) -> Preset:
+    return Preset(name, lambda d, p, _f=conds_fn: _all_of(_f(d, p)), params, conditions=conds_fn, **kw)
+
+
 PRESETS: list[Preset] = [
-    Preset("Pullback MA50", pullback_ma, _ma_params(50, 15, 60), extras=pullback_ma_extras),
-    Preset("Pullback MA200", pullback_ma, _ma_params(200, 25, 120), extras=pullback_ma_extras),
-    Preset(
+    _preset("Pullback MA50", pullback_ma_conds, _ma_params(50, 15, 60), extras=pullback_ma_extras),
+    _preset("Pullback MA200", pullback_ma_conds, _ma_params(200, 25, 120), extras=pullback_ma_extras),
+    _preset(
         "Pullback BB Mid",
-        pullback_bb_mid,
+        pullback_bb_mid_conds,
         {
             "low_tol": _TOL_LO(0.98),
             "high_tol": _TOL_HI(1.02),
@@ -272,21 +287,21 @@ PRESETS: list[Preset] = [
         },
         extras=pullback_bb_mid_extras,
     ),
-    Preset(
+    _preset(
         "BB Reversal",
-        bb_reversal,
+        bb_reversal_conds,
         {"min_value": _VAL(1.0), "need_body": _YN("Wajib body candle > body kemarin", 1)},
         extras=bb_reversal_extras,
     ),
-    Preset(
+    _preset(
         "Magic V1.1 & V1.3",
-        magic_v11,
+        magic_v11_conds,
         {"sma_period": Param("Periode SMA", 5, 1, "%.0f"), "min_value": _VAL(5.0)},
         extras=magic_continuation_extras,
     ),
-    Preset(
+    _preset(
         "Magic V1.2",
-        magic_v12,
+        magic_v12_conds,
         {
             "sma_period": Param("Periode SMA", 5, 1, "%.0f"),
             "jump": Param("High 2 hari lalu / close 3 hari lalu min", 1.10, 0.01, "%.2f"),
@@ -294,9 +309,9 @@ PRESETS: list[Preset] = [
         },
         extras=magic_reversal_extras,
     ),
-    Preset(
+    _preset(
         "Magic V2.1",
-        magic_v21,
+        magic_v21_conds,
         {
             "sma_period": Param("Periode SMA", 5, 1, "%.0f"),
             "high_jump": Param("High hari ini / close kemarin min", 1.10, 0.01, "%.2f"),

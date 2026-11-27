@@ -334,6 +334,28 @@ if res:
                 st.success("Terkirim ke Telegram.") if ok else st.error(f"Gagal kirim: {err}")
 
     if not trades.empty:
+        with st.expander("📅 Winrate per hari sinyal (Senin–Jumat)"):
+            hari = {0: "Senin", 1: "Selasa", 2: "Rabu", 3: "Kamis", 4: "Jumat"}
+            t = trades.copy()
+            t["Hari sinyal"] = pd.Categorical(
+                pd.to_datetime(t["Date"]).dt.dayofweek.map(hari), categories=list(hari.values()), ordered=True
+            )
+            g = t.groupby(["Screener", "Hari sinyal"], observed=True).agg(
+                n=("Outcome", "size"),
+                winrate=("Outcome", lambda s: (s == "TP").mean() * 100),
+                expectancy=("NetRet", lambda s: s.mean() * 100),
+            ).reset_index()
+            g["Winrate (n)"] = g.apply(lambda r: f"{r['winrate']:.0f}% ({int(r['n'])})", axis=1)
+            st.markdown("**Winrate (jumlah sinyal)**")
+            st.dataframe(g.pivot(index="Screener", columns="Hari sinyal", values="Winrate (n)").fillna("-"))
+            st.markdown("**Expectancy bersih per trade (%)**")
+            st.dataframe(g.pivot(index="Screener", columns="Hari sinyal", values="expectancy").round(2))
+            st.caption(
+                "Hari sinyal = hari kamu membeli (di close). Dengan hari menahan D+1, sinyal Kamis diuji di hari Jumat "
+                "dan sinyal Jumat diuji di hari Senin (melewati akhir pekan). Hati-hati: tiap sel hanya berisi sebagian "
+                "sinyal, jadi selisih kecil atau jumlah di bawah ±30 bisa kebetulan. Percayai pola yang konsisten di "
+                "banyak paket dan banyak periode."
+            )
         with st.expander("Daftar transaksi backtest"):
             st.dataframe(trades)
             st.download_button("Unduh CSV", trades.to_csv(index=False).encode(), "trades.csv", "text/csv")

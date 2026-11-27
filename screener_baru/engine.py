@@ -122,6 +122,13 @@ def run(
 
     stats = {k: summarize(g) for k, g in trades.groupby(["Ticker", "Screener"])} if not trades.empty else {}
     show_sl = any(s.bt.sl_pct > 0 for s in strategies)
+    # winrate saham itu pada hari yang sama dengan tanggal screener (mis. semua sinyalnya yang muncul di hari Jumat)
+    dow = screen_date.dayofweek
+    hari = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"][dow]
+    stats_dow = {}
+    if not trades.empty:
+        same = trades[pd.to_datetime(trades["Date"]).dt.dayofweek == dow]
+        stats_dow = {k: summarize(g) for k, g in same.groupby(["Ticker", "Screener"])}
     rows = []
     for r in cands:
         s = stats.get((r["Ticker"], r["Screener"]), {"n": 0})
@@ -132,6 +139,9 @@ def run(
         if show_sl:
             r["Winrate abaikan SL (%)"] = round(s["winrate_simple"], 1) if n else None
         r["Expectancy (%)"] = round(s["expectancy"], 2) if n else None
+        sd = stats_dow.get((r["Ticker"], r["Screener"]), {"n": 0})
+        r[f"Winrate {hari} (%)"] = round(sd["winrate"], 1) if sd["n"] else None
+        r[f"Sinyal {hari}"] = sd["n"]
         r["Catatan"] = "" if n >= min_sample else ("belum ada riwayat" if n == 0 else "sampel kecil")
         rows.append(r)
 

@@ -103,6 +103,85 @@ def cached_prices(mtime: float, tickers_key: tuple):
 
 
 # ------------------------------------------------------------------ sidebar
+def _num(v, nd=1, suffix=""):
+    return "-" if v is None or pd.isna(v) else f"{float(v):.{nd}f}{suffix}"
+
+
+def build_ai_summary(view: pd.DataFrame, *, date, status: str, lookback: int, fees: tuple,
+                     max_pick: int, th: dict) -> str:
+    """Teks siap tempel untuk AI: tugas, konteks strategi, daftar periksa, dan seluruh kandidat."""
+    bf_, sf_, slip_ = fees
+    day_col = next((c for c in view.columns if c.startswith("Winrate ") and c.endswith(" (%)")
+                    and c not in ("Winrate (%)", "Winrate abaikan SL (%)")), None)
+    hari = day_col[len("Winrate "):-len(" (%)")] if day_col else None
+
+    combos = {(r.get("TP (%)"), r.get("SL (%)"), r.get("Hari")) for _, r in view.iterrows()}
+    same = len(combos) == 1
+    if same:
+        tp_, sl_, hd_ = next(iter(combos))
+        tp_text = f"TP {tp_:g}% | {'SL ' + format(sl_, 'g') + '%' if sl_ else 'tanpa SL'} | maksimal menahan D+{int(hd_)}."
+    else:
+        tp_text = "TP/SL/hari menahan berbeda per paket; tertera pada tiap emiten."
+
+    lines = []
+    for i, (_, r) in enumerate(view.iterrows(), 1):
+        parts = [f"{i}. {r['Ticker']}", f"paket: {r['Screener']}" + (f" ({int(r['Jml paket'])} paket)" if "Jml paket" in view.columns and pd.notna(r.get("Jml paket")) else ""),
+                 f"harga {_num(r['Harga'], 0)}", f"naik {_num(r['Naik (%)'], 2, '%')}",
+                 f"nilai Rp{_num(r['Nilai (Rp M)'], 1)}M",
+                 f"winrate {_num(r['Winrate (%)'], 1, '%')} dari {int(r['Sinyal lalu'])} sinyal",
+                 f"expectancy {_num(r['Expectancy (%)'], 2, '%')}"]
+        if day_col and pd.notna(r.get(day_col)) and int(r.get(f"Sinyal {hari}", 0) or 0) > 0:
+            parts.append(f"{hari}: winrate {_num(r[day_col], 1, '%')} dari {int(r[f'Sinyal {hari}'])} sinyal")
+        elif day_col:
+            parts.append(f"{hari}: belum ada riwayat")
+        if r.get("Warning"):
+            parts.append("⚠️ ekor atas panjang")
+        if pd.notna(r.get("Jarak ke garis (%)")):
+            parts.append(f"jarak ke garis {_num(r['Jarak ke garis (%)'], 2, '%')}")
+        if r.get("Bonus"):
+            parts.append(f"bonus: {r['Bonus']}")
+        if r.get("Paket lain"):
+            parts.append(f"paket lain: {r['Paket lain']}")
+        if r.get("Catatan"):
+            parts.append(f"catatan: {r['Catatan']}")
+        if not same:
+            parts.append(f"TP {r['TP (%)']:g}% SL {r['SL (%)']:g}% D+{int(r['Hari'])}")
+        lines.append(" | ".join(parts))
+
+    day_rule = (f"6. Jika Winrate {hari} (dengan minimal 5 sinyal) lebih rendah dari Winrate keseluruhan lebih dari "
+                f"{th['day_gap']} poin → beri peringatan.") if hari else "6. (tidak ada data per hari)"
+    return f"""Kamu jadi pemeriksa kedua untuk screener saham IDX. Hasil ini HANYA referensi; keputusan akhir ada di saya.
+
+TUGAS
+Dari daftar kandidat di bawah, pilih MAKSIMAL {max_pick} emiten yang paling layak dipertimbangkan.
+- Boleh kurang dari {max_pick}. Boleh KOSONG bila tidak ada yang memenuhi daftar periksa — jangan dipaksa.
+- Jangan menebak arah harga. Jangan mengarang berita, aksi korporasi, atau data yang tidak ada di bawah; bila data kurang, katakan.
+- Gunakan hanya angka di tabel. Bila menghitung sesuatu, tunjukkan hitungannya.
+
+FORMAT JAWABAN
+1) Layak dipertimbangkan (maks {max_pick}): per emiten → alasan (kutip angka), risiko utama, dan yang harus saya cek manual (chart TF15/support, bid-offer pre-closing, berita).
+2) Ditolak: satu baris alasan per emiten.
+3) Catatan: keganjilan/kontradiksi pada data dan hal yang perlu saya cek ulang.
+
+KONTEKS
+- Tanggal sinyal: {date} ({status}).
+- Gaya saya: beli di pre-closing, jual keesokan hari (atau sesuai batas hari menahan); CL manual bila bertahan di bawah support TF15 menjelang penutupan.
+- Backtest: {lookback} hari ke belakang, hanya dari riwayat sinyal saham itu sendiri pada paket yang sama. Entry di close hari sinyal. Menang = High menyentuh TP dalam batas hari menahan; tanpa SL, yang tidak kena TP keluar di close hari terakhir. Expectancy = rata-rata hasil bersih per trade setelah fee (beli {bf_:g}%, jual+pajak {sf_:g}%, slippage entry {slip_:g}%).
+- {tp_text}
+- Cara baca: winrate tinggi dengan expectancy ≈ 0 berarti sesekali kalah besar; sampel kecil tidak bisa dipercaya; ⚠️ = ekor atas candle panjang (rawan jual).
+
+DAFTAR PERIKSA (urut dari yang terpenting)
+1. Sinyal lalu ≥ {th['min_n']}.
+2. Expectancy > {th['min_exp']:g}%.
+3. Nilai transaksi ≥ Rp{th['min_value']:g} miliar.
+4. Naik pada hari sinyal ≤ {th['big_move']:g}% (lebih dari itu rawan pembalikan → beri peringatan).
+5. Tanda ⚠️ = nilai negatif. Jumlah paket yang meloloskan lebih banyak = nilai positif.
+{day_rule}
+
+KANDIDAT ({len(view)} emiten)
+""" + "\n".join(lines) + "\n"
+
+
 def arrange_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Urutan tabel hasil: yang menentukan keputusan di depan, detail teknis di belakang."""
     front = ["Rank", "Kirim", "Screener", "Jml paket", "Ticker", "Harga", "Naik (%)", "Warning",
@@ -352,6 +431,29 @@ if res:
             else:
                 ok, err = send_telegram(format_telegram(pick))
                 st.success("Terkirim ke Telegram.") if ok else st.error(f"Gagal kirim: {err}")
+
+        with st.expander("🤖 Ringkasan untuk AI (salin lalu tempel ke chat AI)"):
+            a1, a2, a3, a4, a5 = st.columns(5)
+            max_pick = a1.number_input("Maks emiten dipilih", 1, 10, 4, key="ai_max")
+            th = {
+                "min_n": int(a2.number_input("Sinyal lalu min", 0, 500, 20, key="ai_minn")),
+                "min_exp": a3.number_input("Expectancy min (%)", -5.0, 10.0, 0.3, step=0.1, key="ai_minexp"),
+                "min_value": a4.number_input("Nilai transaksi min (Rp M)", 0.0, 10000.0, 20.0, step=5.0, key="ai_minval"),
+                "big_move": a5.number_input("Naik harian waspada (%)", 1.0, 50.0, 15.0, step=1.0, key="ai_bigmove"),
+                "day_gap": 15,
+            }
+            res_date = pd.Timestamp(res["date"])
+            live_ = res_date == today and not market_is_final(now)
+            status = ("candle hari ini BELUM final, harga sementara; data Yahoo tertunda ± 10 menit"
+                      if live_ else "candle final")
+            text = build_ai_summary(view, date=res["date"], status=status, lookback=res["lookback"],
+                                    fees=(bf, sf, slip), max_pick=int(max_pick), th=th)
+            st.caption("Klik ikon salin di pojok kanan atas kotak, lalu tempel ke chat. "
+                       "Tambahkan screenshot chart/order book 2–3 saham yang lolos bila perlu.")
+            try:
+                st.code(text, language=None, wrap_lines=True)
+            except TypeError:  # Streamlit lama tanpa wrap_lines
+                st.code(text, language=None)
 
     if not trades.empty:
         if not cand.empty:

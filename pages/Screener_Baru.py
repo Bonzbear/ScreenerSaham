@@ -127,7 +127,7 @@ def build_ai_summary(view: pd.DataFrame, *, date, status: str, lookback: int, fe
     for i, (_, r) in enumerate(view.iterrows(), 1):
         parts = [f"{i}. {r['Ticker']}", f"paket: {r['Screener']}" + (f" ({int(r['Jml paket'])} paket)" if "Jml paket" in view.columns and pd.notna(r.get("Jml paket")) else ""),
                  f"harga {_num(r['Harga'], 0)}", f"naik {_num(r['Naik (%)'], 2, '%')}",
-                 f"nilai Rp{_num(r['Nilai (Rp M)'], 1)}M",
+                 f"nilai Rp{_num(r['Nilai (Rp M)'], 1)} miliar",
                  f"winrate {_num(r['Winrate (%)'], 1, '%')} dari {int(r['Sinyal lalu'])} sinyal",
                  f"expectancy {_num(r['Expectancy (%)'], 2, '%')}"]
         if day_col and pd.notna(r.get(day_col)) and int(r.get(f"Sinyal {hari}", 0) or 0) > 0:

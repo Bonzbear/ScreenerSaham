@@ -103,6 +103,22 @@ def cached_prices(mtime: float, tickers_key: tuple):
 
 
 # ------------------------------------------------------------------ sidebar
+def arrange_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Urutan tabel hasil: yang menentukan keputusan di depan, detail teknis di belakang."""
+    front = ["Rank", "Kirim", "Screener", "Jml paket", "Ticker", "Harga", "Naik (%)", "Warning",
+             "Winrate (%)", "Sinyal lalu", "Expectancy (%)"]
+    back = ["Nilai (Rp M)", "TP (%)", "SL (%)", "Hari"]
+    front = [c for c in front if c in df.columns]
+    back = [c for c in back if c in df.columns]
+    fixed = set(front) | set(back)
+    # winrate/sinyal khusus hari ini & winrate abaikan SL: tepat setelah Expectancy
+    dyn = [c for c in df.columns if c.startswith(("Winrate ", "Sinyal ")) and c not in fixed]
+    tail = [c for c in ("Jarak ke garis (%)", "Catatan", "Bonus", "Paket lain") if c in df.columns]
+    used = fixed | set(dyn) | set(tail)
+    other = [c for c in df.columns if c not in used]
+    return df[front + dyn + tail + other + back]
+
+
 def cache_age():
     """(waktu unduh terakhir WIB, umur dalam menit) dari file cache; (None, None) bila belum ada."""
     mt = dm.cache_mtime()
@@ -314,10 +330,14 @@ if res:
             st.success(f"{len(view)} sinyal ditemukan.")
         show = view.copy()
         show["Kirim"] = False
+        show = arrange_columns(show)
         edited = st.data_editor(
             show, hide_index=True,
             disabled=[x for x in show.columns if x != "Kirim"],
-            column_config={"Harga": st.column_config.NumberColumn(format="%d")},
+            column_config={
+                "Harga": st.column_config.NumberColumn(format="%d"),
+                "Bonus": st.column_config.TextColumn("Bonus", width="large"),
+            },
         )
         st.caption(
             f"Winrate = persentase sinyal lampau saham itu (paket yang sama, {res['lookback']} hari ke belakang) "
@@ -334,28 +354,35 @@ if res:
                 st.success("Terkirim ke Telegram.") if ok else st.error(f"Gagal kirim: {err}")
 
     if not trades.empty:
-        with st.expander("📅 Winrate per hari sinyal (Senin–Jumat)"):
-            hari = {0: "Senin", 1: "Selasa", 2: "Rabu", 3: "Kamis", 4: "Jumat"}
-            t = trades.copy()
-            t["Hari sinyal"] = pd.Categorical(
-                pd.to_datetime(t["Date"]).dt.dayofweek.map(hari), categories=list(hari.values()), ordered=True
-            )
-            g = t.groupby(["Screener", "Hari sinyal"], observed=True).agg(
-                n=("Outcome", "size"),
-                winrate=("Outcome", lambda s: (s == "TP").mean() * 100),
-                expectancy=("NetRet", lambda s: s.mean() * 100),
-            ).reset_index()
-            g["Winrate (n)"] = g.apply(lambda r: f"{r['winrate']:.0f}% ({int(r['n'])})", axis=1)
-            st.markdown("**Winrate (jumlah sinyal)**")
-            st.dataframe(g.pivot(index="Screener", columns="Hari sinyal", values="Winrate (n)").fillna("-"))
-            st.markdown("**Expectancy bersih per trade (%)**")
-            st.dataframe(g.pivot(index="Screener", columns="Hari sinyal", values="expectancy").round(2))
-            st.caption(
-                "Hari sinyal = hari kamu membeli (di close). Dengan hari menahan D+1, sinyal Kamis diuji di hari Jumat "
-                "dan sinyal Jumat diuji di hari Senin (melewati akhir pekan). Hati-hati: tiap sel hanya berisi sebagian "
-                "sinyal, jadi selisih kecil atau jumlah di bawah ±30 bisa kebetulan. Percayai pola yang konsisten di "
-                "banyak paket dan banyak periode."
-            )
+        if not cand.empty:
+            with st.expander("📅 Winrate per hari — saham di hasil ini (riwayat saham itu sendiri)"):
+                hari = {0: "Senin", 1: "Selasa", 2: "Rabu", 3: "Kamis", 4: "Jumat"}
+                today_dow = pd.Timestamp(res["date"]).dayofweek
+                pairs = set(zip(cand["Ticker"] + ".JK", cand["Screener"]))
+                tt = trades[[(a_, b_) in pairs for a_, b_ in zip(trades["Ticker"], trades["Screener"])]].copy()
+                tt["dow"] = pd.to_datetime(tt["Date"]).dt.dayofweek
+
+                def cell(sub):
+                    n = len(sub)
+                    if n == 0:
+                        return "-"
+                    return f"{(sub['Outcome'] == 'TP').mean() * 100:.0f}% ({n})" + ("*" if n < 5 else "")
+
+                rows = []
+                for _, r_ in cand.iterrows():
+                    sub = tt[(tt["Ticker"] == r_["Ticker"] + ".JK") & (tt["Screener"] == r_["Screener"])]
+                    row = {"Screener": r_["Screener"], "Ticker": r_["Ticker"]}
+                    for k, nm in hari.items():
+                        row[nm + (" ◀ hari ini" if k == today_dow else "")] = cell(sub[sub["dow"] == k])
+                    row["Semua hari"] = cell(sub)
+                    rows.append(row)
+                st.dataframe(pd.DataFrame(rows), hide_index=True)
+                st.caption(
+                    "Format: winrate (jumlah sinyal). Hari = hari saat sinyal muncul (kamu beli di close); dengan D+1, "
+                    "sinyal Kamis diuji di hari Jumat dan sinyal Jumat diuji di hari Senin. Tanda * = kurang dari 5 sinyal, "
+                    "jangan dipercaya. Riwayat satu saham biasanya hanya puluhan sinyal, jadi per hari tinggal beberapa — "
+                    "pakai sebagai pertimbangan tambahan, bukan penentu."
+                )
         with st.expander("Daftar transaksi backtest"):
             st.dataframe(trades)
             st.download_button("Unduh CSV", trades.to_csv(index=False).encode(), "trades.csv", "text/csv")

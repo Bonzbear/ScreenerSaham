@@ -198,12 +198,15 @@ def bb_reversal_extras(d, p):
 
 def magic_v11_conds(d, p):
     c = d["Close"]
-    return [
+    conds = [
         ("Volume > volume kemarin", d["Volume"] > d["Volume"].shift(1)),
         ("Close kemarin < close hari ini", c.shift(1) < c),
         ("Close > SMA", c > sma(d, p["sma_period"])),
         ("Nilai transaksi hari ini cukup", _value_ok(d, p)),
     ]
+    if p.get("min_naik_pct", 0) > 0:
+        conds.append(("Kenaikan close hari ini ≥ batas (%)", (c / c.shift(1) - 1) * 100 >= p["min_naik_pct"]))
+    return conds
 
 
 def magic_v12_conds(d, p):
@@ -296,7 +299,11 @@ PRESETS: list[Preset] = [
     _preset(
         "Magic V1.1 & V1.3",
         magic_v11_conds,
-        {"sma_period": Param("Periode SMA", 5, 1, "%.0f"), "min_value": _VAL(5.0)},
+        {
+            "sma_period": Param("Periode SMA", 5, 1, "%.0f"),
+            "min_value": _VAL(5.0),
+            "min_naik_pct": Param("Kenaikan close hari ini min (%) (0 = abaikan)", 0.0, 0.5, "%.1f"),
+        },
         extras=magic_continuation_extras,
     ),
     _preset(
@@ -316,6 +323,18 @@ PRESETS: list[Preset] = [
             "sma_period": Param("Periode SMA", 5, 1, "%.0f"),
             "high_jump": Param("High hari ini / close kemarin min", 1.10, 0.01, "%.2f"),
             "min_value": _VAL(5.0),
+            "min_naik_pct": Param("Kenaikan close hari ini min (%) (0 = abaikan)", 0.0, 0.5, "%.1f"),
+        },
+        extras=magic_continuation_extras,
+    ),
+    _preset(
+        "Magic V2.2",
+        magic_v21_conds,
+        {
+            "sma_period": Param("Periode SMA", 5, 1, "%.0f"),
+            "high_jump": Param("High hari ini / close kemarin min", 1.20, 0.01, "%.2f"),
+            "min_value": _VAL(5.0),
+            "min_naik_pct": Param("Kenaikan close hari ini min (%) (0 = abaikan)", 0.0, 0.5, "%.1f"),
         },
         extras=magic_continuation_extras,
     ),

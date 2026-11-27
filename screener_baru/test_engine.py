@@ -215,7 +215,7 @@ def naive_preset(name, d, p):
 
 
 LOOSE = {"min_value": 0.001, "low_tol": 0.90, "high_tol": 1.10, "min_bandwidth": 0.0,
-         "jump": 1.02, "high_jump": 1.01, "llv_days": 3, "min_ext_pct": 3, "peak_window": 20}
+         "jump": 1.02, "high_jump": 1.01, "min_naik_pct": 0, "llv_days": 3, "min_ext_pct": 3, "peak_window": 20}
 
 
 def _loose(pr, **over):

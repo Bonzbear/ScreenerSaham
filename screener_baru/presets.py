@@ -332,9 +332,9 @@ PRESETS: list[Preset] = [
         magic_v21_conds,
         {
             "sma_period": Param("Periode SMA", 5, 1, "%.0f"),
-            "high_jump": Param("High hari ini / close kemarin min", 1.20, 0.01, "%.2f"),
+            "high_jump": Param("High hari ini / close kemarin min", 1.10, 0.01, "%.2f"),
             "min_value": _VAL(5.0),
-            "min_naik_pct": Param("Kenaikan close hari ini min (%) (0 = abaikan)", 0.0, 0.5, "%.1f"),
+            "min_naik_pct": Param("Kenaikan close hari ini min (%) (0 = abaikan)", 20.0, 0.5, "%.1f"),
         },
         extras=magic_continuation_extras,
     ),

@@ -13,6 +13,7 @@ import requests
 import streamlit as st
 
 from screener_baru import data as dm
+from screener_baru import signal_log as sl
 from screener_baru.backtest import BacktestParams
 from screener_baru.engine import MIN_SAMPLE, Strategy, active_dates, align, run, strategy_from_preset
 from screener_baru.presets import PRESET_BY_NAME, PRESETS
@@ -432,6 +433,14 @@ if res:
                 ok, err = send_telegram(format_telegram(pick))
                 st.success("Terkirim ke Telegram.") if ok else st.error(f"Gagal kirim: {err}")
 
+        lc1, lc2 = st.columns([1, 3])
+        if lc1.button("💾 Catat sinyal ini ke log"):
+            rows_ = sl.make_rows(cand, res["date"], dt.datetime.now(WIB))
+            sl.save_log(sl.merge_logs(sl.load_log(), rows_))
+            lc2.success(
+                f"{len(rows_)} sinyal dicatat dengan harga saat ini. Catat saat pre-closing agar harga mendekati harga beli sebenarnya."
+            )
+
         with st.expander("🤖 Ringkasan untuk AI (salin lalu tempel ke chat AI)"):
             a1, a2, a3, a4, a5 = st.columns(5)
             max_pick = a1.number_input("Maks emiten dipilih", 1, 10, 4, key="ai_max")
@@ -488,6 +497,31 @@ if res:
         with st.expander("Daftar transaksi backtest"):
             st.dataframe(trades)
             st.download_button("Unduh CSV", trades.to_csv(index=False).encode(), "trades.csv", "text/csv")
+
+
+# ------------------------------------------------------------ catatan sinyal
+with st.expander("📒 Catatan sinyal (forward test) — winrate aktual vs backtest"):
+    up = st.file_uploader("Pulihkan log dari CSV (bila log hilang setelah reboot)", type="csv", key="log_up")
+    if up is not None and st.button("Gabungkan CSV ke log"):
+        sl.save_log(sl.merge_logs(sl.load_log(), pd.read_csv(up)))
+        st.success("Log digabung.")
+    log_ = sl.load_log()
+    if log_.empty:
+        st.info("Belum ada catatan. Setelah screener jalan (idealnya saat pre-closing), klik 'Catat sinyal ini ke log'. "
+                "Hasil nyata dihitung otomatis setelah hari menahan lewat dan data diperbarui.")
+    else:
+        ev_ = sl.evaluate(log_, prices_view)
+        sm_ = sl.summarize_log(ev_)
+        if sm_.empty:
+            st.info(f"{len(log_)} sinyal tercatat, belum ada yang selesai (menunggu hari berikutnya + perbarui data).")
+        else:
+            st.dataframe(sm_, hide_index=True)
+            st.caption("Entry = harga saat dicatat; TP bila High hari-hari berikutnya menyentuh TP, selain itu keluar di close "
+                       "hari terakhir; return belum termasuk fee. Kalau winrate aktual jauh di bawah backtest, "
+                       "kemungkinan harga pre-closing lebih mahal dari harga close atau strategi overfit. "
+                       "Butuh puluhan sinyal per paket sebelum angkanya bisa dipercaya.")
+        st.dataframe(ev_.sort_values("Tanggal", ascending=False), hide_index=True)
+        st.download_button("Unduh log CSV", log_.to_csv(index=False).encode(), "signal_log.csv", "text/csv")
 
 
 # ------------------------------------------------------------ periksa saham
